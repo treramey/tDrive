@@ -27,7 +27,7 @@
 		{
 			"binding": "DB",
 			"database_name": "adrive",
-			"database_id": "replace-with-your-d1-database-id",
+			"database_id": "16b5b997-ba21-4bfa-9226-14f36d2ca235",
 			"migrations_dir": "migrations"
 		}
 	],
@@ -72,12 +72,12 @@
 			// Cache API.
 			"placement": { "mode": "smart" },
 			"routes": [
-				{ "pattern": "drive.davis7.space", "custom_domain": true },
-				{ "pattern": "files.davis7.space", "custom_domain": true }
+				{ "pattern": "drive.trevors.link", "custom_domain": true },
+				{ "pattern": "files.trevors.link", "custom_domain": true }
 			],
 			"vars": {
-				"DASHBOARD_ORIGIN": "https://drive.davis7.space",
-				"CONTENT_ORIGIN": "https://files.davis7.space",
+				"DASHBOARD_ORIGIN": "https://drive.trevors.link",
+				"CONTENT_ORIGIN": "https://files.trevors.link",
 				"MAX_UPLOAD_BYTES": "99614720",
 				"MAX_TOTAL_BYTES": "107374182400",
 				// required (not auto) so a missing AI/Vectorize binding fails
@@ -103,7 +103,7 @@
 				{
 					"binding": "DB",
 					"database_name": "adrive-production",
-					"database_id": "29891a68-07c7-47e4-94db-b0123982fc1f",
+					"database_id": "16b5b997-ba21-4bfa-9226-14f36d2ca235",
 					"migrations_dir": "migrations"
 				}
 			],
@@ -119,7 +119,7 @@
 			"kv_namespaces": [
 				{
 					"binding": "AUTH_GUARD",
-					"id": "09b884a95e5e40389d8554b3cd690d3f"
+					"id": "f83ecf39865f446c83da2374ba94ea9c"
 				}
 			],
 			"observability": {

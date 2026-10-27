@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "adrive",
+      "name": "tdrive",
       "devDependencies": {
         "prettier": "^3.9.6",
         "prettier-plugin-svelte": "^4.1.1",
@@ -11,14 +11,14 @@
       },
     },
     "apps/site": {
-      "name": "@adrive/site",
+      "name": "@tdrive/site",
       "version": "0.1.0",
     },
     "apps/web": {
-      "name": "@adrive/web",
+      "name": "@tdrive/web",
       "version": "0.1.0",
       "dependencies": {
-        "@adrive/shared": "workspace:^",
+        "@tdrive/shared": "workspace:^",
         "@effect/sql-d1": "4.0.0-beta.102",
         "@modelcontextprotocol/server": "2.3.1",
         "agents": "^0.28.1",
@@ -49,13 +49,13 @@
       },
     },
     "packages/cli": {
-      "name": "@adrive/cli",
+      "name": "@tdrive/cli",
       "version": "0.1.0",
       "bin": {
-        "adrive": "./dist/adrive.mjs",
+        "tdrive": "./dist/tdrive.mjs",
       },
       "dependencies": {
-        "@adrive/shared": "workspace:^",
+        "@tdrive/shared": "workspace:^",
         "@effect/platform-node": "4.0.0-beta.102",
         "effect": "4.0.0-beta.102",
         "mime": "^4.1.0",
@@ -70,7 +70,7 @@
       },
     },
     "packages/shared": {
-      "name": "@adrive/shared",
+      "name": "@tdrive/shared",
       "version": "0.1.0",
       "dependencies": {
         "effect": "4.0.0-beta.102",
@@ -81,13 +81,13 @@
     },
   },
   "packages": {
-    "@adrive/cli": ["@adrive/cli@workspace:packages/cli"],
+    "@tdrive/cli": ["@tdrive/cli@workspace:packages/cli"],
 
-    "@adrive/shared": ["@adrive/shared@workspace:packages/shared"],
+    "@tdrive/shared": ["@tdrive/shared@workspace:packages/shared"],
 
-    "@adrive/site": ["@adrive/site@workspace:apps/site"],
+    "@tdrive/site": ["@tdrive/site@workspace:apps/site"],
 
-    "@adrive/web": ["@adrive/web@workspace:apps/web"],
+    "@tdrive/web": ["@tdrive/web@workspace:apps/web"],
 
     "@babel/code-frame": ["@babel/code-frame@8.0.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^8.0.0", "js-tokens": "^10.0.0" } }, "sha512-dYYg153EyN2Ekbqw2zAsbd6/JR+9N2SEoC7YV2GyyqMM7x9bLDTjBD6XBhSMLH0wtIVyJj03jWNriQhaN+eoCw=="],
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DashboardFile, FileVersion, Tag } from '@adrive/shared';
+	import type { DashboardFile, FileVersion, Tag } from '@tdrive/shared';
 	import Button from '$lib/components/ui/Button.svelte';
 	import CopyButton from '$lib/components/ui/CopyButton.svelte';
 	import ExpirySelect from '$lib/components/ui/ExpirySelect.svelte';

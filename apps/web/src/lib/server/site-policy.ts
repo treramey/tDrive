@@ -2,7 +2,7 @@ import {
 	InvalidSitePath,
 	normalizeSitePath,
 	type SiteManifestAsset
-} from '@adrive/shared';
+} from '@tdrive/shared';
 import mime from 'mime';
 import { InvalidRequest } from './errors';
 import { cleanContentType, cleanFileName } from './file-policy';

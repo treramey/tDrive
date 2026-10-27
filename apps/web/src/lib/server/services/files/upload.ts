@@ -131,7 +131,7 @@ export const uploadOps = (
 			if (current.kind === 'site') {
 				return yield* new InvalidRequest({
 					status: 400,
-					message: 'Republish sites with `adrive site put`'
+					message: 'Republish sites with `tdrive site put`'
 				});
 			}
 			const size = yield* Effect.try({
@@ -182,7 +182,7 @@ export const uploadOps = (
 			if (current.kind === 'site') {
 				return yield* new InvalidRequest({
 					status: 400,
-					message: 'Republish sites with `adrive site put`'
+					message: 'Republish sites with `tdrive site put`'
 				});
 			}
 			if (current.version === version) {

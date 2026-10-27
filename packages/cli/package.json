@@ -1,5 +1,5 @@
 {
-	"name": "@adrive/cli",
+	"name": "@tdrive/cli",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
@@ -7,10 +7,10 @@
 		"node": ">=20"
 	},
 	"bin": {
-		"adrive": "./dist/adrive.mjs"
+		"tdrive": "./dist/tdrive.mjs"
 	},
 	"scripts": {
-		"adrive": "node --experimental-strip-types src/main.ts",
+		"tdrive": "node --experimental-strip-types src/main.ts",
 		"build": "node scripts/build.mjs",
 		"check": "bun run check:types && bun run check:effect",
 		"check:effect": "effect-tsgo diagnostics --project tsconfig.json --format pretty",
@@ -18,7 +18,7 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@adrive/shared": "workspace:^",
+		"@tdrive/shared": "workspace:^",
 		"@effect/platform-node": "4.0.0-beta.102",
 		"effect": "4.0.0-beta.102",
 		"mime": "^4.1.0"

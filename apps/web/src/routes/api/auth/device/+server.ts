@@ -1,4 +1,4 @@
-import { DeviceAuthorizationCreateSchema } from '@adrive/shared';
+import { DeviceAuthorizationCreateSchema } from '@tdrive/shared';
 import type { RequestHandler } from './$types';
 import { Effect } from 'effect';
 import { authRateLimitResponse } from '$lib/server/auth-rate-limit-response';

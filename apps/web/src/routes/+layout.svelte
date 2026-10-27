@@ -35,21 +35,21 @@
 		media="(prefers-color-scheme: dark)"
 	/>
 	<meta property="og:type" content="website" />
-	<meta property="og:site_name" content="adrive" />
-	<meta property="og:title" content="adrive" />
+	<meta property="og:site_name" content="tdrive" />
+	<meta property="og:title" content="tdrive" />
 	<meta
 		property="og:description"
 		content="A small, self-hosted file drive for agents and scripts."
 	/>
 	<meta property="og:image" content={`${data.origin}/og-image.png`} />
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="adrive" />
+	<meta name="twitter:title" content="tdrive" />
 	<meta
 		name="twitter:description"
 		content="A small, self-hosted file drive for agents and scripts."
 	/>
 	<meta name="twitter:image" content={`${data.origin}/og-image.png`} />
-	<meta name="apple-mobile-web-app-title" content="adrive" />
+	<meta name="apple-mobile-web-app-title" content="tdrive" />
 	<link rel="icon" href="/favicon.svg" />
 	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 </svelte:head>
@@ -60,7 +60,7 @@
 			class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6"
 		>
 			<a href="/" class="text-sm font-semibold tracking-tight text-zinc-950">
-				adrive
+				tdrive
 			</a>
 			{#if session.token}
 				<nav class="flex items-center gap-1" aria-label="Account">

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# a-drive release: validate -> check -> test -> build -> dry-run ->
+# tdrive release: validate -> check -> test -> build -> dry-run ->
 # migrate -> deploy -> record. Run from the repo root: bun release
 set -euo pipefail
 
@@ -79,7 +79,7 @@ step "Next"
 cat <<'EOF'
 Deployment is live but NOT verified. Now run the production verification
 skill against the deployment (see .agents/skills/verify-deployment):
-ask an agent to "verify the a-drive deployment". A release is complete
+ask an agent to "verify the tdrive deployment". A release is complete
 only when the verification report passes.
 
 Rollback: docs/release.md#rollback

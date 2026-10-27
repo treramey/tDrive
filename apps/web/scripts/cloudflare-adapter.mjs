@@ -73,7 +73,7 @@ export const withScheduledLifecycle = (options) => {
 
 	return {
 		...base,
-		name: '@adrive/adapter-cloudflare',
+		name: '@tdrive/adapter-cloudflare',
 		async adapt(builder) {
 			await base.adapt(builder);
 			const directory = main.slice(0, main.lastIndexOf('/'));

@@ -1,4 +1,4 @@
-import { FileDetailResponseSchema } from '@adrive/shared';
+import { FileDetailResponseSchema } from '@tdrive/shared';
 import { Schema } from 'effect';
 import type { PageServerLoad } from './$types';
 
@@ -20,7 +20,7 @@ const readError = async (response: Response) => {
 };
 
 export const load: PageServerLoad = async ({ depends, fetch, params }) => {
-	depends(`adrive:file:${params.id}`);
+	depends(`tdrive:file:${params.id}`);
 	let response: Response;
 	try {
 		response = await fetch(`/api/files/${encodeURIComponent(params.id)}`);

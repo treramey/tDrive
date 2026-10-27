@@ -1,5 +1,5 @@
 {
-	"name": "@adrive/web",
+	"name": "@tdrive/web",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
@@ -18,7 +18,7 @@
 		"types:worker": "wrangler types"
 	},
 	"dependencies": {
-		"@adrive/shared": "workspace:^",
+		"@tdrive/shared": "workspace:^",
 		"@effect/sql-d1": "4.0.0-beta.102",
 		"@modelcontextprotocol/server": "2.3.1",
 		"agents": "^0.28.1",

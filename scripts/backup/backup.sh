@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# a-drive nightly backup: R2 sync + D1 export + retention + manifest.
+# tdrive nightly backup: R2 sync + D1 export + retention + manifest.
 # Runs on the backup host from cron. Configuration comes from backup.env next to
 # this script (see backup.env.example). Never prints secrets.
 set -euo pipefail
@@ -88,7 +88,7 @@ log() {
 }
 
 alert() {
-	local message="a-drive backup: $*"
+	local message="tdrive backup: $*"
 	log "ALERT: $*"
 	if [[ -n "${ALERT_WEBHOOK_URL:-}" ]]; then
 		curl -fsS -m 15 -X POST \

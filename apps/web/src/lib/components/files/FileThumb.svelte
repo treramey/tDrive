@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DashboardFile } from '@adrive/shared';
+	import type { DashboardFile } from '@tdrive/shared';
 	import { getContentLink, getFilePreview } from '$lib/dashboard/api';
 	import {
 		dashboardThumbnailUrl,

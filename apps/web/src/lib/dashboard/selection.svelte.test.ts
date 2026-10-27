@@ -1,4 +1,4 @@
-import type { DashboardFile } from '@adrive/shared';
+import type { DashboardFile } from '@tdrive/shared';
 import { flushSync } from 'svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mutateFile } from './api';

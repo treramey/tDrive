@@ -1,4 +1,4 @@
-import type { UploadResponse } from '@adrive/shared';
+import type { UploadResponse } from '@tdrive/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { partitionUploadFiles, UploadManager } from './uploads.svelte';
 

@@ -1,4 +1,5 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Effect, Schema } from 'effect';
@@ -6,12 +7,13 @@ import { CliConfigSchema, type CliConfig } from './config-schema.ts';
 import { CliFailure } from './errors.ts';
 import { assertSecureUrl } from './url-trust.ts';
 
-export const configPath = () =>
-	join(
-		process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'),
-		'adrive',
-		'config.json'
-	);
+export const configPath = () => {
+	const root = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
+	const current = join(root, 'tdrive', 'config.json');
+	const legacy = join(root, 'adrive', 'config.json');
+	// Reuse existing credentials after the rename; new installs use tdrive.
+	return !existsSync(current) && existsSync(legacy) ? legacy : current;
+};
 
 export const saveConfig = (config: CliConfig) =>
 	Effect.tryPromise({
@@ -93,7 +95,7 @@ export const loadConfig = Effect.tryPromise({
 	try: () => readFile(configPath(), 'utf8'),
 	catch: () =>
 		new CliFailure({
-			message: 'Not logged in. Run `adrive login <server-url>` first.'
+			message: 'Not logged in. Run `tdrive login <server-url>` first.'
 		})
 }).pipe(
 	Effect.flatMap((text) =>
@@ -101,7 +103,7 @@ export const loadConfig = Effect.tryPromise({
 			try: () => JSON.parse(text),
 			catch: (cause) =>
 				new CliFailure({
-					message: 'The adrive config file is not valid JSON',
+					message: 'The tdrive config file is not valid JSON',
 					cause
 				})
 		})
@@ -126,7 +128,7 @@ export const loadConfig = Effect.tryPromise({
 				new CliFailure({
 					message:
 						cause instanceof Error
-							? `${cause.message} Re-run \`adrive login\`.`
+							? `${cause.message} Re-run \`tdrive login\`.`
 							: 'The configured server URL is invalid',
 					cause
 				})

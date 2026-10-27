@@ -1,4 +1,4 @@
-import { sitePathCandidates } from '@adrive/shared';
+import { sitePathCandidates } from '@tdrive/shared';
 import { Effect } from 'effect';
 import { InvalidRequest, NotFound } from '../../errors';
 import type { SiteInternals } from './internals';

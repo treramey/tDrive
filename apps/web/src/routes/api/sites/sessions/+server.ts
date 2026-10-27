@@ -1,7 +1,7 @@
 import {
 	SiteSessionCreateSchema,
 	type SiteSessionCreate
-} from '@adrive/shared';
+} from '@tdrive/shared';
 import type { RequestHandler } from './$types';
 import { Effect, Schema } from 'effect';
 import { runEdge } from '$lib/server/edge';

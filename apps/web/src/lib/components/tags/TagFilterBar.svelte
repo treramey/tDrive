@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Tag } from '@adrive/shared';
+	import type { Tag } from '@tdrive/shared';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import TagChip from './TagChip.svelte';
 

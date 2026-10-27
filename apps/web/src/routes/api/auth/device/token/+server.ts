@@ -1,4 +1,4 @@
-import { DeviceTokenRequestSchema } from '@adrive/shared';
+import { DeviceTokenRequestSchema } from '@tdrive/shared';
 import type { RequestHandler } from './$types';
 import { Effect } from 'effect';
 import { authRateLimitResponse } from '$lib/server/auth-rate-limit-response';

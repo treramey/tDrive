@@ -1,4 +1,4 @@
-import type { DashboardFile } from '@adrive/shared';
+import type { DashboardFile } from '@tdrive/shared';
 import { Effect } from 'effect';
 import { SqlClient } from 'effect/unstable/sql';
 import {

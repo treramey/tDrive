@@ -1,13 +1,13 @@
 // Bundles the CLI into a single executable ESM file. The version comes
-// from ADRIVE_CLI_VERSION (set by the release workflow from the git tag);
+// from TDRIVE_CLI_VERSION (set by the release workflow from the git tag);
 // local builds get 0.0.0-local so a stray artifact is never mistaken for
 // a release.
 import { chmod } from 'node:fs/promises';
 import { build } from 'esbuild';
 
-const version = process.env.ADRIVE_CLI_VERSION ?? '0.0.0-local';
+const version = process.env.TDRIVE_CLI_VERSION ?? '0.0.0-local';
 if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
-	console.error(`ADRIVE_CLI_VERSION is not a valid semver: ${version}`);
+	console.error(`TDRIVE_CLI_VERSION is not a valid semver: ${version}`);
 	process.exit(1);
 }
 
@@ -17,7 +17,7 @@ await build({
 	platform: 'node',
 	format: 'esm',
 	target: 'node20',
-	outfile: 'dist/adrive.mjs',
+	outfile: 'dist/tdrive.mjs',
 	banner: {
 		// CJS deps in the graph (yaml, via effect's CLI config loading)
 		// call require() for node builtins; ESM output needs a real
@@ -28,11 +28,11 @@ await build({
 			'const require = __createRequire(import.meta.url);'
 		].join('\n')
 	},
-	define: { __ADRIVE_VERSION__: JSON.stringify(version) },
+	define: { __TDRIVE_VERSION__: JSON.stringify(version) },
 	// Belt and braces: deep imports already avoid the NodeRedis barrel
 	// path, but never let the redis client into the bundle regardless.
 	external: ['ioredis'],
 	logLevel: 'info'
 });
 
-await chmod('dist/adrive.mjs', 0o755);
+await chmod('dist/tdrive.mjs', 0o755);

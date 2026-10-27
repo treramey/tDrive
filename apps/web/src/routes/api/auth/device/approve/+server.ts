@@ -1,4 +1,4 @@
-import { DeviceApprovalSchema } from '@adrive/shared';
+import { DeviceApprovalSchema } from '@tdrive/shared';
 import type { RequestHandler } from './$types';
 import { Effect } from 'effect';
 import { runEdge } from '$lib/server/edge';

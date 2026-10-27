@@ -1,4 +1,4 @@
-import type { DashboardFile } from '@adrive/shared';
+import type { DashboardFile } from '@tdrive/shared';
 import { getContentLink, listFiles, searchFiles } from './api';
 import type { FileListPayload } from './api';
 import { listingMode, type ListingMode } from '$lib/listing';

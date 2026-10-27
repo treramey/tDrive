@@ -1,5 +1,12 @@
 import { createServer, type Server } from 'node:http';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	rename,
+	rm,
+	writeFile
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -240,8 +247,8 @@ beforeAll(async () => {
 		throw new Error('Test server did not bind a TCP port');
 	}
 	endpoint = `http://127.0.0.1:${address.port}`;
-	configHome = await mkdtemp(join(tmpdir(), 'adrive-cli-test-'));
-	const path = join(configHome, 'adrive', 'config.json');
+	configHome = await mkdtemp(join(tmpdir(), 'tdrive-cli-test-'));
+	const path = join(configHome, 'tdrive', 'config.json');
 	await mkdir(dirname(path), { recursive: true });
 	await writeFile(
 		path,
@@ -263,11 +270,11 @@ afterAll(async () => {
 	await rm(configHome, { recursive: true, force: true });
 });
 
-// ADRIVE_TEST_BUNDLE points the whole suite at a built dist/adrive.mjs
+// TDRIVE_TEST_BUNDLE points the whole suite at a built dist/tdrive.mjs
 // instead of the TS source — the release workflow runs both, so
 // bundle-only breakage (CJS interop, tree-shaking, define wiring) is
 // caught by the same contract tests.
-const bundlePath = process.env.ADRIVE_TEST_BUNDLE;
+const bundlePath = process.env.TDRIVE_TEST_BUNDLE;
 const entrypoint = bundlePath
 	? [bundlePath]
 	: ['--experimental-strip-types', join(import.meta.dirname, 'main.ts')];
@@ -297,6 +304,39 @@ const run = (args: ReadonlyArray<string>, input?: Buffer) =>
 	});
 
 describe('CLI stream and JSON contracts', () => {
+	it('reuses existing adrive credentials when no tdrive config exists', async () => {
+		const current = join(configHome, 'tdrive', 'config.json');
+		const legacy = join(configHome, 'adrive', 'config.json');
+		await mkdir(dirname(legacy), { recursive: true });
+		await rename(current, legacy);
+		try {
+			const result = await run(['--json', 'whoami']);
+			expect(result.status).toBe(0);
+			expect(JSON.parse(result.stdout.toString())).toMatchObject({
+				authenticated: true,
+				config: legacy
+			});
+		} finally {
+			await rename(legacy, current);
+		}
+	});
+
+	it('prefers the tdrive config when a legacy config also exists', async () => {
+		const legacy = join(configHome, 'adrive', 'config.json');
+		await mkdir(dirname(legacy), { recursive: true });
+		await writeFile(legacy, 'invalid JSON', { mode: 0o600 });
+		try {
+			const result = await run(['--json', 'whoami']);
+			expect(result.status).toBe(0);
+			expect(JSON.parse(result.stdout.toString())).toMatchObject({
+				authenticated: true,
+				config: join(configHome, 'tdrive', 'config.json')
+			});
+		} finally {
+			await rm(legacy);
+		}
+	});
+
 	it('spools binary stdin, uploads it, and emits only one JSON result', async () => {
 		const payload = Buffer.from([0, 1, 2, 255, 128, 64]);
 		const result = await run(
@@ -376,7 +416,7 @@ describe('CLI stream and JSON contracts', () => {
 	it('never prints a signed download grant in error detail', async () => {
 		linkUrlOverride = `${contentEndpoint}/f/leaky?v=1&e=1785154500&g=SECRETGRANT`;
 		try {
-			const result = await run(['get', file.id, '--output', '/tmp/adrive-x']);
+			const result = await run(['get', file.id, '--output', '/tmp/tdrive-x']);
 			expect(result.status).not.toBe(0);
 			const combined = result.stdout.toString() + result.stderr.toString();
 			expect(combined).not.toContain('SECRETGRANT');
@@ -421,7 +461,7 @@ describe('CLI stream and JSON contracts', () => {
 	});
 
 	it('fails whoami when the server rejects the stored key', async () => {
-		const path = join(configHome, 'adrive', 'config.json');
+		const path = join(configHome, 'tdrive', 'config.json');
 		const previous = await readFile(path, 'utf8');
 		await writeFile(
 			path,
@@ -479,7 +519,7 @@ describe('CLI stream and JSON contracts', () => {
 		]);
 		expect(devicePolls).toBe(3);
 		const saved = JSON.parse(
-			await readFile(join(configHome, 'adrive', 'config.json'), 'utf8')
+			await readFile(join(configHome, 'tdrive', 'config.json'), 'utf8')
 		);
 		expect(saved).toEqual({
 			endpoint,
@@ -510,7 +550,7 @@ describe('CLI stream and JSON contracts', () => {
 		]);
 		expect(devicePolls).toBe(3);
 		const saved = JSON.parse(
-			await readFile(join(configHome, 'adrive', 'config.json'), 'utf8')
+			await readFile(join(configHome, 'tdrive', 'config.json'), 'utf8')
 		);
 		expect(saved).toEqual({
 			endpoint,

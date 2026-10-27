@@ -4,7 +4,7 @@ import {
 	FileMutationResponseSchema,
 	FileTagsResponseSchema,
 	UploadResponseSchema
-} from '@adrive/shared';
+} from '@tdrive/shared';
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -138,9 +138,9 @@ const prepareUpload = (file: string, suppliedName: Option.Option<string>) =>
 			}
 			const displayName = Option.getOrUndefined(suppliedName)?.trim();
 			if (!displayName) {
-				throw new Error('`adrive put -` requires --name');
+				throw new Error('`tdrive put -` requires --name');
 			}
-			const temporaryDirectory = await mkdtemp(join(tmpdir(), 'adrive-stdin-'));
+			const temporaryDirectory = await mkdtemp(join(tmpdir(), 'tdrive-stdin-'));
 			const path = join(temporaryDirectory, 'payload');
 			await pipeline(process.stdin, createWriteStream(path, { mode: 0o600 }));
 			return { path, displayName, temporaryDirectory };
@@ -215,7 +215,7 @@ export const put = Command.make(
 				)
 			);
 		})
-).pipe(Command.withDescription('Stream a file to adrive'));
+).pipe(Command.withDescription('Stream a file to tdrive'));
 
 export const list = Command.make('list', {}, () =>
 	Effect.gen(function* () {
@@ -364,7 +364,7 @@ export const get = Command.make(
 				);
 			}
 		})
-).pipe(Command.withDescription('Stream a file from adrive'));
+).pipe(Command.withDescription('Stream a file from tdrive'));
 
 export const rename = Command.make(
 	'rename',

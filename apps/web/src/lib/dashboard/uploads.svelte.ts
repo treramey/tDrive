@@ -1,4 +1,4 @@
-import type { Tag } from '@adrive/shared';
+import type { Tag } from '@tdrive/shared';
 import { uploadFile } from './api';
 
 export type UploadItem = {

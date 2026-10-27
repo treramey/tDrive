@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Tag } from '@adrive/shared';
+	import type { Tag } from '@tdrive/shared';
 	import { formatBytes, isHtmlFile } from '$lib/dashboard/format';
 	import {
 		partitionUploadFiles,
@@ -88,7 +88,7 @@
 			rejected = [];
 			if (input) input.value = '';
 			folderError =
-				'Folders are not uploaded as files. Use `adrive site put` for a site directory.';
+				'Folders are not uploaded as files. Use `tdrive site put` for a site directory.';
 			return;
 		}
 		choose(transfer.files);

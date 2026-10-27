@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { FileMutation, Tag } from '@adrive/shared';
+	import type { FileMutation, Tag } from '@tdrive/shared';
 	import Button from '$lib/components/ui/Button.svelte';
 
 	let {

@@ -1,4 +1,4 @@
-import { normalizeSitePath } from '@adrive/shared';
+import { normalizeSitePath } from '@tdrive/shared';
 import { Effect } from 'effect';
 import { InvalidRequest, NotFound, StorageError } from '../../errors';
 import { fileIndexStatements } from '../../search-index';

@@ -1,6 +1,6 @@
-# adrive
+# tdrive
 
-adrive is a Cloudflare-backed file spine with a dashboard, tags, hybrid
+tdrive is a Cloudflare-backed file spine with a dashboard, tags, hybrid
 search, static-site publishing, deployment-based authentication, and
 scheduled storage lifecycle management.
 Uploads stream directly to R2, metadata and append-only version history live in
@@ -18,10 +18,10 @@ Single-file build, no repo checkout needed (requires Node 20+):
 curl -fsSL https://raw.githubusercontent.com/davis7dotsh/aDrive/main/scripts/install-cli.sh | bash
 ```
 
-This installs to `~/.adrive/bin` (no sudo), verifies the download against
+This installs to `~/.tdrive/bin` (no sudo), verifies the download against
 the release's SHA-256 checksums, and prints PATH guidance. Pin a version
-with `ADRIVE_CLI_VERSION=cli-v0.1.0`, update later with `adrive upgrade`
-or `adrive update`, then connect with `adrive login <your-drive-url>`.
+with `TDRIVE_CLI_VERSION=cli-v0.1.0`, update later with `tdrive upgrade`
+or `tdrive update`, then connect with `tdrive login <your-drive-url>`.
 
 ## Connect MCP
 
@@ -58,7 +58,7 @@ Replace the example `PASSCODE` with a long local-only value. Copy the API key
 printed by the final command, then start both local origins:
 
 ```bash
-bun --filter @adrive/web dev
+bun --filter @tdrive/web dev
 ```
 
 The dashboard/API is at `http://localhost:5173/`. Public file bytes are
@@ -103,27 +103,28 @@ atomic global security boundary.
 In another shell, configure and exercise the CLI:
 
 ```bash
-bun adrive login http://localhost:5173 --headless
-bun adrive list
-bun adrive put ./path/to/file.pdf
-bun adrive put ./path/to/private.bin --private
-printf 'from stdin' | bun adrive put - --name note.txt
-bun adrive put ./report.csv --expires 2026-08-31T00:00:00Z
-bun adrive get <file-uuid> --output ./downloaded-file
-bun adrive get <file-uuid> --output - > downloaded-file
-bun adrive site put ./dist
-bun adrive site put ./dist --id <existing-site-uuid>
-bun adrive --json tag list
-bun adrive tag create reports --color '#2563eb'
-bun adrive tag set <file-uuid> reports important
+bun tdrive login http://localhost:5173 --headless
+bun tdrive list
+bun tdrive put ./path/to/file.pdf
+bun tdrive put ./path/to/private.bin --private
+printf 'from stdin' | bun tdrive put - --name note.txt
+bun tdrive put ./report.csv --expires 2026-08-31T00:00:00Z
+bun tdrive get <file-uuid> --output ./downloaded-file
+bun tdrive get <file-uuid> --output - > downloaded-file
+bun tdrive site put ./dist
+bun tdrive site put ./dist --id <existing-site-uuid>
+bun tdrive --json tag list
+bun tdrive tag create reports --color '#2563eb'
+bun tdrive tag set <file-uuid> reports important
 ```
 
 `login` starts a device flow. Normal mode tries to open the approval URL;
 `--headless` prints the same complete URL so it can be opened on another
 machine. Approval mints one full-access API key and saves it at mode `0600`
-under `$XDG_CONFIG_HOME/adrive/config.json` (or
-`~/.config/adrive/config.json`). Device codes are stored only as SHA-256 hashes
-and expire after ten minutes.
+under `$XDG_CONFIG_HOME/tdrive/config.json` (or
+`~/.config/tdrive/config.json`). Existing `adrive/config.json` credentials are
+reused when no `tdrive/config.json` exists, including for subsequent logins.
+Device codes are stored only as SHA-256 hashes and expire after ten minutes.
 
 Uploads default public; HTML is always made public. Human-mode upload and site
 success output keeps the public URL alone on its own line. Put `--json` before a
@@ -151,7 +152,7 @@ bun check
 bun run test
 ```
 
-Run `bun --filter @adrive/web types:worker` after changing Wrangler bindings.
+Run `bun --filter @tdrive/web types:worker` after changing Wrangler bindings.
 The checked-in `worker-configuration.d.ts` is generated from `wrangler.jsonc`.
 The Cloudflare adapter wrapper emits a standard module Worker with both `fetch`
 and `scheduled` exports. Its signed internal maintenance request is authenticated
@@ -170,6 +171,12 @@ The rebuild reads `files`, `file_versions`, `tags`, and `file_tags`; it does not
 modify those source tables.
 
 ## Cloudflare resources
+
+The project is named `tdrive`. Existing Cloudflare Worker and storage resource
+names, domains, backup paths, GitHub repository URLs, API headers, session cookies,
+and signing identifiers retain their earlier names for deployment and client
+compatibility. The CLI command is now `tdrive`, and CLI environment variables use
+the `TDRIVE_` prefix.
 
 The checked-in Wrangler D1 and R2 resource names are placeholders. The
 `AUTH_GUARD` KV namespace is already provisioned and bound. Before deployment,
@@ -202,13 +209,13 @@ Provision the optional resources once, before the first vector insert:
 
 ```bash
 cd apps/web
-bun x wrangler vectorize create adrive \
+bun x wrangler vectorize create tdrive \
   --dimensions=384 --metric=cosine
-bun x wrangler vectorize create-metadata-index adrive \
+bun x wrangler vectorize create-metadata-index tdrive \
   --propertyName=deleted --type=boolean
-bun x wrangler vectorize create-metadata-index adrive \
+bun x wrangler vectorize create-metadata-index tdrive \
   --propertyName=kind --type=string
-bun x wrangler vectorize create-metadata-index adrive \
+bun x wrangler vectorize create-metadata-index tdrive \
   --propertyName=visibility --type=string
 ```
 
@@ -216,11 +223,11 @@ Then add these bindings to `apps/web/wrangler.jsonc` and regenerate types:
 
 ```jsonc
 "ai": { "binding": "AI" },
-"vectorize": [{ "binding": "VECTORIZE", "index_name": "adrive" }]
+"vectorize": [{ "binding": "VECTORIZE", "index_name": "tdrive" }]
 ```
 
 ```bash
-bun --filter @adrive/web types:worker
+bun --filter @tdrive/web types:worker
 ```
 
 The embedding contract is pinned in Wrangler config to

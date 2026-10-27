@@ -4,7 +4,7 @@ import {
 	SiteCommitResponseSchema,
 	SiteSessionResponseSchema,
 	type SiteManifestAsset
-} from '@adrive/shared';
+} from '@tdrive/shared';
 import { lstat, readdir, realpath } from 'node:fs/promises';
 import { basename, join, relative, sep } from 'node:path';
 import { Console, Effect, Option } from 'effect';

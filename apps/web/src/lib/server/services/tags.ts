@@ -1,4 +1,4 @@
-import type { Tag, TagCreate, TagUpdate } from '@adrive/shared';
+import type { Tag, TagCreate, TagUpdate } from '@tdrive/shared';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { SqlClient } from 'effect/unstable/sql';
 import { InvalidRequest, NotFound, StorageError, validate } from '../errors';

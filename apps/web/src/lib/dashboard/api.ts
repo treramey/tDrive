@@ -6,7 +6,7 @@ import type {
 	Tag,
 	TagCreate,
 	TagUpdate
-} from '@adrive/shared';
+} from '@tdrive/shared';
 import {
 	parseApiKeyCreateResponse,
 	parseApiKeyListResponse,

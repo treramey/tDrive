@@ -3,10 +3,10 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>adrive — a personal file drive on Cloudflare</title>
+		<title>tdrive — a personal file drive on Cloudflare</title>
 		<meta
 			name="description"
-			content="adrive is a small, self-hosted personal file drive that runs entirely on Cloudflare Workers, R2, and D1. One user, one passcode, a dashboard, and a CLI."
+			content="tdrive is a small, self-hosted personal file drive that runs entirely on Cloudflare Workers, R2, and D1. One user, one passcode, a dashboard, and a CLI."
 		/>
 		<style>
 			:root {
@@ -124,13 +124,13 @@
 		</style>
 	</head>
 	<body>
-		<h1>adrive</h1>
+		<h1>tdrive</h1>
 		<p class="tagline">
 			A personal file drive that runs entirely on Cloudflare.
 		</p>
 
 		<p>
-			adrive is a small, self-hosted alternative to consumer file drives, built
+			tdrive is a small, self-hosted alternative to consumer file drives, built
 			for exactly one user: you. File bytes stream straight into
 			<strong>R2</strong>, metadata and append-only version history live in
 			<strong>D1</strong>, and everything is served by a single
@@ -149,7 +149,7 @@
 				Public files get clean shareable URLs; private files use short-lived
 				signed grants.
 			</li>
-			<li>Publish whole static sites with <code>adrive site put</code>.</li>
+			<li>Publish whole static sites with <code>tdrive site put</code>.</li>
 			<li>
 				HTML and downloads are isolated on a separate cookie-less content
 				origin, away from the dashboard.
@@ -217,7 +217,7 @@
 		</script>
 		<p>
 			Then point it at a deployment with
-			<code>adrive login &lt;your-drive-url&gt;</code>. The
+			<code>tdrive login &lt;your-drive-url&gt;</code>. The
 			<a href="https://github.com/davis7dotsh/aDrive#local-setup"
 				>README walks through local setup</a
 			>, and <code>docs/release.md</code> in the repo covers deploying your own

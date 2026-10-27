@@ -1,4 +1,4 @@
-import { ApiKeyCreateSchema } from '@adrive/shared';
+import { ApiKeyCreateSchema } from '@tdrive/shared';
 import type { RequestHandler } from './$types';
 import { Effect } from 'effect';
 import { runEdge } from '$lib/server/edge';

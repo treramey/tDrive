@@ -4,7 +4,7 @@
 // to trust the shapes it renders. Using Effect here dragged its runtime into
 // the browser bundle (~120 KB gzipped on top of the dashboard), slowing every
 // first load and hydration. These parsers mirror the server schemas and throw
-// on anything unexpected, keeping the types from @adrive/shared. Like Effect's
+// on anything unexpected, keeping the types from @tdrive/shared. Like Effect's
 // Struct decoders, they require every declared field but ignore extra keys.
 import type {
 	ApiKey,
@@ -19,9 +19,9 @@ import type {
 	Tag,
 	TagResponse,
 	UploadResponse
-} from '@adrive/shared';
+} from '@tdrive/shared';
 
-// Response envelopes that @adrive/shared does not name as types.
+// Response envelopes that @tdrive/shared does not name as types.
 type ApiKeyListResponse = { readonly keys: ReadonlyArray<ApiKey> };
 type ApiKeyCreateResponse = { readonly key: ApiKey; readonly token: string };
 type SessionsRevokedResponse = { readonly revoked: number };

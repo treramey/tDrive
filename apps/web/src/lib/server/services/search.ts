@@ -1,4 +1,4 @@
-import type { DashboardFile } from '@adrive/shared';
+import type { DashboardFile } from '@tdrive/shared';
 import { Context, Effect, Layer } from 'effect';
 import { InvalidRequest, StorageError } from '../errors';
 import {

@@ -1,5 +1,5 @@
 import { Effect, Schema } from 'effect';
-import { FileListResponseSchema, type FileListResponse } from '@adrive/shared';
+import { FileListResponseSchema, type FileListResponse } from '@tdrive/shared';
 import { call, type RouteTestContext } from './route-context';
 
 // Use the real local dev passcode when present, otherwise the isolated

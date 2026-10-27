@@ -1,9 +1,9 @@
 ---
 name: deploy-fresh-instance
-description: Deploy a fresh a-drive instance to Cloudflare Workers — provision D1, R2, KV, and Vectorize plus Workers AI, set the PASSCODE secret, attach the two custom domains, and cut the first release. Use for the first-ever deploy to a new Cloudflare account or a new operator domain (not for routine redeploys, which are just `bun release`).
+description: Deploy a fresh tdrive instance to Cloudflare Workers — provision D1, R2, KV, and Vectorize plus Workers AI, set the PASSCODE secret, attach the two custom domains, and cut the first release. Use for the first-ever deploy to a new Cloudflare account or a new operator domain (not for routine redeploys, which are just `bun release`).
 ---
 
-# Deploy a fresh a-drive instance to Cloudflare
+# Deploy a fresh tdrive instance to Cloudflare
 
 This is the proven first-deploy sequence, executed successfully for
 `davis7.space` (Aug 2026). It complements `docs/release.md` (the canonical

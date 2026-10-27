@@ -1,4 +1,4 @@
-import type { DashboardFile, FileMutation, Tag } from '@adrive/shared';
+import type { DashboardFile, FileMutation, Tag } from '@tdrive/shared';
 import { mutateFile, setFileTags } from './api';
 import type { Toasts } from './toast.svelte';
 

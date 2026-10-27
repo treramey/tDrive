@@ -1,4 +1,4 @@
-import type { FileSummary } from '@adrive/shared';
+import type { FileSummary } from '@tdrive/shared';
 import { describe, expect, it } from 'vitest';
 import { mintPrivateGrant } from './private-grant';
 import {

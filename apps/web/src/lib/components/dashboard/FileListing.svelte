@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DashboardFile } from '@adrive/shared';
+	import type { DashboardFile } from '@tdrive/shared';
 	import { page } from '$app/state';
 	import Button from '$lib/components/ui/Button.svelte';
 	import FileGrid from '$lib/components/files/FileGrid.svelte';

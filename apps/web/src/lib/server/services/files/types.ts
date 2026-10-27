@@ -1,4 +1,4 @@
-import type { DashboardFile, FileDetail, FileSummary } from '@adrive/shared';
+import type { DashboardFile, FileDetail, FileSummary } from '@tdrive/shared';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
 import type { StoredBlob } from '../blobs';

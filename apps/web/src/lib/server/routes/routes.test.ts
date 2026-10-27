@@ -1,6 +1,6 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { Schema } from 'effect';
-import { FileListResponseSchema } from '@adrive/shared';
+import { FileListResponseSchema } from '@tdrive/shared';
 import { dashboardThumbnailUrl } from '$lib/file-thumbnail';
 
 vi.mock('$app/server', async () => {

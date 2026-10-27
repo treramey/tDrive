@@ -1,7 +1,7 @@
 // Compiled (.svelte.ts) fixture so tests can instantiate createSelection
 // with live $effects; plain .test.ts files are not rune-compiled.
 import { flushSync } from 'svelte';
-import type { DashboardFile } from '@adrive/shared';
+import type { DashboardFile } from '@tdrive/shared';
 import { createSelection, type Selection } from './selection.svelte';
 
 type SelectionDeps = Parameters<typeof createSelection>[0];

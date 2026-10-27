@@ -51,7 +51,7 @@ export const assertTrustedServerUrl = (
 	if (!trusted.includes(url.origin)) {
 		throw new Error(
 			`${label} points at an unexpected origin (${url.origin}). ` +
-				'Re-run `adrive login` if the server moved.'
+				'Re-run `tdrive login` if the server moved.'
 		);
 	}
 	return value;

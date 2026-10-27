@@ -19,6 +19,32 @@ const stubLink = (payload: FileContentLinkResponse) => {
 	);
 };
 
+it('rejects binary previews before decoding and never caches them as text', async () => {
+	const decode = vi.fn();
+	const cancel = vi.fn();
+	vi.stubGlobal(
+		'fetch',
+		fetchMock.mockImplementation(async () => {
+			const response = new Response(new ReadableStream({ cancel }), {
+				headers: { 'X-Adrive-Preview-Kind': 'docx' }
+			});
+
+			response.text = decode;
+
+			return response;
+		})
+	);
+	await expect(getFilePreview('token', 'binary-docx', 1)).rejects.toMatchObject(
+		{ status: 415 }
+	);
+	await expect(getFilePreview('token', 'binary-docx', 1)).rejects.toMatchObject(
+		{ status: 415 }
+	);
+	expect(decode).not.toHaveBeenCalled();
+	expect(cancel).toHaveBeenCalledTimes(2);
+	expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
 describe('content link memoization', () => {
 	it('reuses an unexpired private link without another request', async () => {
 		stubLink({

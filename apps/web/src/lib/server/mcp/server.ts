@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { validateExpiration } from '../auth-policy';
 import { AppConfig } from '../config';
 import { InvalidRequest, validate } from '../errors';
-import { maxPreviewBytes, previewKind } from '../file-preview';
+import { maxPreviewBytes, previewKind } from '$lib/file-preview';
 import { resolveFileContentLink } from '../file-content-link';
 import type { AuthorizedCredential } from '../services/auth';
 import { AuthGuard } from '../services/auth-guard';
@@ -288,7 +288,7 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 						detail.file.contentType
 					);
 
-					if (kind === null) {
+					if (kind !== 'text' && kind !== 'markdown') {
 						return { file: detail.file, ...link };
 					}
 

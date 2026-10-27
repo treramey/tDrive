@@ -1,8 +1,13 @@
 import type { RequestHandler } from './$types';
 import { Effect } from 'effect';
-import { InvalidRequest } from '$lib/server/errors';
+import { InvalidRequest, StorageError } from '$lib/server/errors';
 import { runEdge } from '$lib/server/edge';
-import { maxPreviewBytes, previewKind } from '$lib/server/file-preview';
+import {
+	docxMediaType,
+	maxDocxPreviewBytes,
+	maxPreviewBytes,
+	previewKind
+} from '$lib/file-preview';
 import { Auth, authorizeRequest } from '$lib/server/services/auth';
 import { Blobs } from '$lib/server/services/blobs';
 import { Files } from '$lib/server/services/files';
@@ -56,10 +61,40 @@ export const GET: RequestHandler = ({ cookies, params, request, url }) =>
 				});
 			}
 
-			if (content.file.sizeBytes > maxPreviewBytes) {
+			if (
+				content.file.sizeBytes >
+				(kind === 'docx' ? maxDocxPreviewBytes : maxPreviewBytes)
+			) {
 				return yield* new InvalidRequest({
 					status: 413,
 					message: 'File is too large to preview'
+				});
+			}
+
+			if (kind === 'docx') {
+				const object = yield* blobs.get(content.r2Key);
+
+				if (object.size > maxDocxPreviewBytes) {
+					yield* Effect.tryPromise({
+						try: () => object.body.cancel(),
+						catch: (cause) =>
+							new StorageError({ operation: 'cancel docx preview', cause })
+					});
+
+					return yield* new InvalidRequest({
+						status: 413,
+						message: 'File is too large to preview'
+					});
+				}
+
+				return new Response(object.body, {
+					headers: {
+						'Cache-Control': 'private, no-store',
+						'Content-Type': docxMediaType,
+						'Content-Length': String(object.size),
+						'X-Adrive-Preview-Kind': kind,
+						'X-Content-Type-Options': 'nosniff'
+					}
 				});
 			}
 

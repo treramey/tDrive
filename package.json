@@ -14,12 +14,13 @@
 	],
 	"scripts": {
 		"tdrive": "bun --filter @tdrive/cli tdrive",
-		"check": "bun run --filter '@tdrive/*' --if-present check && bun run check:forbidden && bun run check:wrangler-drift",
+		"check": "bun run --filter '@tdrive/*' --if-present check && bun run check:forbidden && bun run check:wrangler-drift && vp check",
 		"check:forbidden": "bun scripts/check-forbidden.mjs",
 		"check:wrangler-drift": "bun scripts/check-wrangler-drift.mjs",
 		"db:migrate:local": "cd apps/web && bun x wrangler d1 migrations apply DB --local",
-		"format": "prettier --write .",
-		"format:check": "prettier --check .",
+		"format": "vp fmt --write .",
+		"format:check": "vp fmt --check .",
+		"lint": "vp lint .",
 		"key:create:local": "bun scripts/create-local-key.mjs",
 		"postinstall": "find node_modules -path '*/@effect/tsgo*/lib/tsc' -exec chmod +x {} +",
 		"release": "bash scripts/release.sh",
@@ -27,8 +28,9 @@
 		"test": "bun run --filter '@tdrive/*' --if-present test && bun --filter @tdrive/web test:runes && bun --filter @tdrive/web test:routes"
 	},
 	"devDependencies": {
-		"prettier": "^3.9.6",
-		"prettier-plugin-svelte": "^4.1.1",
-		"vitest": "^4.1.10"
+		"@oxlint/plugins": "1.89.0",
+		"vite-plus": "1.4.0",
+		"vitest": "^4.1.10",
+		"zod": "^4.4.3"
 	}
 }

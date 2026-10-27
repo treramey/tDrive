@@ -17,6 +17,7 @@ const server = createServer((incoming, outgoing) => {
 
 	upstream.on('error', (cause) => {
 		console.error(`Content proxy failed: ${cause.message}`);
+
 		if (!outgoing.headersSent) outgoing.writeHead(502);
 		outgoing.end('Dashboard dev server unavailable');
 	});

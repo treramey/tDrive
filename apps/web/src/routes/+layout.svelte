@@ -8,7 +8,9 @@
 
 	let { children, data }: LayoutProps = $props();
 	const session = createDashboardSession(untrack(() => data.browserSession));
+
 	createToasts();
+
 	const authError = $derived(
 		session.error || (!session.ready ? data.authError : '')
 	);

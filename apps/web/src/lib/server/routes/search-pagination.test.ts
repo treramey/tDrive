@@ -1,11 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { Schema } from 'effect';
 import { FileListResponseSchema } from '@tdrive/shared';
-
-vi.mock('$app/server', async () => {
-	const { mockGetRequestEvent } = await import('../test/route-context.js');
-	return mockGetRequestEvent();
-});
 
 import {
 	call,
@@ -23,6 +18,7 @@ const seedPagedFiles = async (
 	tag: string
 ) => {
 	const ids: string[] = [];
+
 	for (let i = 0; i < count; i += 1) {
 		const file = await uploadFile(ctx, {
 			name: `paged-orbit-${i}.txt`,
@@ -30,9 +26,11 @@ const seedPagedFiles = async (
 			isPublic: true,
 			tags: [tag]
 		});
+
 		await indexFile(ctx, file.id);
 		ids.push(file.id);
 	}
+
 	return ids;
 };
 
@@ -40,10 +38,12 @@ describe('search pagination (local platform)', () => {
 	let shared: RouteTestContext | undefined;
 	let seededIds: string[] | undefined;
 	const setup = async () => (shared ??= await createRouteContext());
+
 	const ensureSeed = async (ctx: RouteTestContext) => {
 		if (seededIds) return seededIds;
 		await login(ctx);
 		seededIds = await seedPagedFiles(ctx, 51, 'paged-orbit');
+
 		return seededIds;
 	};
 
@@ -55,10 +55,12 @@ describe('search pagination (local platform)', () => {
 			const ids = await ensureSeed(ctx);
 
 			const { GET } = await import('../../../routes/api/search/+server.js');
+
 			const first = await call(
 				GET,
 				ctx.event({ path: '/api/search?q=paged-orbit' })
 			);
+
 			expect(first.status).toBe(200);
 			const page1 = await decodePage(first);
 			expect(page1.files).toHaveLength(50);
@@ -69,6 +71,7 @@ describe('search pagination (local platform)', () => {
 				GET,
 				ctx.event({ path: '/api/search?q=paged-orbit&cursor=o%3A1' })
 			);
+
 			expect(again.status).toBe(200);
 			const page2 = await decodePage(again);
 			expect(page2.files).toHaveLength(1);
@@ -98,17 +101,21 @@ describe('search pagination (local platform)', () => {
 		async () => {
 			const ctx = await setup();
 			await ensureSeed(ctx);
+
 			const listed = await import('../test/helpers').then((helpers) =>
 				helpers.listFiles(ctx)
 			);
+
 			const tag = listed.tags.find((entry) => entry.name === 'paged-orbit');
 			expect(tag).toBeDefined();
 
 			const { GET } = await import('../../../routes/api/search/+server.js');
+
 			const first = await call(
 				GET,
 				ctx.event({ path: `/api/search?tag=${tag!.id}` })
 			);
+
 			expect(first.status).toBe(200);
 			const page1 = await decodePage(first);
 			expect(page1.files).toHaveLength(50);
@@ -120,6 +127,7 @@ describe('search pagination (local platform)', () => {
 					path: `/api/search?tag=${tag!.id}&cursor=${encodeURIComponent(page1.nextCursor!)}`
 				})
 			);
+
 			expect(second.status).toBe(200);
 			const page2 = await decodePage(second);
 			expect(page2.files).toHaveLength(1);

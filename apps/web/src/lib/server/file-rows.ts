@@ -1,5 +1,6 @@
+import { decodeRows } from './decode-rows';
 import { TagSchema, type DashboardFile } from '@tdrive/shared';
-import { Schema } from 'effect';
+import { Schema, Option } from 'effect';
 
 export const DashboardFileRow = Schema.Struct({
 	id: Schema.String,
@@ -68,19 +69,15 @@ export const dashboardFileColumns = `
 	), '[]') AS tags_json
 `;
 
-export const decodeDashboardRows = (rows: unknown) => {
-	const decoded = Schema.decodeUnknownOption(Schema.Array(DashboardFileRow))(
-		rows
-	);
-	return decoded._tag === 'Some' ? decoded.value : [];
-};
+export const decodeDashboardRows = decodeRows(DashboardFileRow);
 
 const decodeTags = (value: string) => {
 	try {
 		const decoded = Schema.decodeUnknownOption(Schema.Array(TagSchema))(
 			JSON.parse(value)
 		);
-		return decoded._tag === 'Some' ? decoded.value : [];
+
+		return Option.isSome(decoded) ? decoded.value : [];
 	} catch {
 		return [];
 	}

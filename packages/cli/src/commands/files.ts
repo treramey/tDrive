@@ -24,6 +24,7 @@ export const status = Command.make('status', {}, () =>
 	Effect.gen(function* () {
 		const config = yield* loadConfig;
 		const client = yield* HttpClient.HttpClient;
+
 		// Page through the listing so counts cover the whole drive, keeping
 		// the first page for its deployment metadata (tags, semantic, limits).
 		const gather = Effect.gen(function* () {
@@ -34,9 +35,12 @@ export const status = Command.make('status', {}, () =>
 			let totalBytes = 0;
 			let cursor: string | null = null;
 			let pages = 0;
+
 			do {
 				const params = new URLSearchParams();
+
 				if (cursor) params.set('cursor', cursor);
+
 				const page = yield* client
 					.execute(
 						apiRequest(
@@ -51,32 +55,41 @@ export const status = Command.make('status', {}, () =>
 							decodeBody(FileListResponseSchema, response)
 						)
 					);
+
 				firstPage ??= page;
+
 				for (const item of page.files) {
 					if (item.kind === 'site') {
 						sites += 1;
 					} else {
 						files += 1;
+
 						if (item.public) publicCount += 1;
 					}
+
 					totalBytes += item.sizeBytes;
 				}
+
 				cursor = page.nextCursor;
 				pages += 1;
 			} while (cursor !== null && pages < 500);
+
 			if (cursor !== null) {
 				return yield* new CliFailure({
 					message:
 						'Listing stopped after 500 pages with more remaining; the server may be misbehaving'
 				});
 			}
+
 			if (firstPage === null) {
 				return yield* new CliFailure({
 					message: 'The server returned no listing pages'
 				});
 			}
+
 			return { firstPage, files, sites, publicCount, totalBytes };
 		});
+
 		const result = yield* gather.pipe(
 			Effect.catch((failure) =>
 				Effect.gen(function* () {
@@ -84,12 +97,15 @@ export const status = Command.make('status', {}, () =>
 						yield* Console.log(`Server      ${config.endpoint}`);
 						yield* Console.log('Connected   no');
 					}
+
 					return yield* failure;
 				})
 			)
 		);
+
 		const { firstPage, files, sites, publicCount, totalBytes } = result;
 		const privateCount = files - publicCount;
+
 		if (wantsJson()) {
 			yield* emit({
 				endpoint: config.endpoint,
@@ -108,6 +124,7 @@ export const status = Command.make('status', {}, () =>
 			const semantic = firstPage.semantic.enabled
 				? `enabled · ${firstPage.semantic.indexedChunks} chunks indexed`
 				: 'disabled';
+
 			yield* Console.log(`Server      ${config.endpoint}`);
 			yield* Console.log('Connected   yes');
 			yield* Console.log(
@@ -129,20 +146,26 @@ const prepareUpload = (file: string, suppliedName: Option.Option<string>) =>
 		try: async () => {
 			if (file !== '-') {
 				const details = await stat(file);
+
 				if (!details.isFile()) throw new Error('Upload path must be a file');
+
 				return {
 					path: file,
 					displayName: Option.getOrElse(suppliedName, () => basename(file)),
 					temporaryDirectory: null
 				};
 			}
+
 			const displayName = Option.getOrUndefined(suppliedName)?.trim();
+
 			if (!displayName) {
 				throw new Error('`tdrive put -` requires --name');
 			}
+
 			const temporaryDirectory = await mkdtemp(join(tmpdir(), 'tdrive-stdin-'));
 			const path = join(temporaryDirectory, 'payload');
 			await pipeline(process.stdin, createWriteStream(path, { mode: 0o600 }));
+
 			return { path, displayName, temporaryDirectory };
 		},
 		catch: (cause) =>
@@ -170,26 +193,33 @@ export const put = Command.make(
 			const config = yield* loadConfig;
 			const client = yield* HttpClient.HttpClient;
 			const prepared = yield* prepareUpload(file, name);
+
 			const upload = Effect.gen(function* () {
 				const contentType =
 					mime.getType(prepared.displayName) ?? 'application/octet-stream';
+
 				const body = yield* HttpBody.file(prepared.path, { contentType });
+
+				const headers = new Headers({
+					'content-type': contentType,
+					'x-adrive-file-name': encodeURIComponent(prepared.displayName),
+					'x-adrive-public': String(!isPrivate)
+				});
+
+				if (Option.isSome(expires))
+					headers.set('x-adrive-expires-at', expires.value);
+
 				const response = yield* client
 					.execute(
 						apiRequest('PUT', `${config.endpoint}/api/files`, config.apiKey, {
 							body,
-							headers: {
-								'content-type': contentType,
-								'x-adrive-file-name': encodeURIComponent(prepared.displayName),
-								'x-adrive-public': String(!isPrivate),
-								...(Option.isSome(expires)
-									? { 'x-adrive-expires-at': expires.value }
-									: {})
-							}
+							headers: Object.fromEntries(headers)
 						})
 					)
 					.pipe(Effect.flatMap(ensureOk));
+
 				const result = yield* decodeBody(UploadResponseSchema, response);
+
 				if (wantsJson()) {
 					yield* emit(result);
 				} else {
@@ -200,6 +230,7 @@ export const put = Command.make(
 					);
 				}
 			});
+
 			yield* upload.pipe(
 				Effect.ensuring(
 					prepared.temporaryDirectory
@@ -221,6 +252,7 @@ export const list = Command.make('list', {}, () =>
 	Effect.gen(function* () {
 		const config = yield* loadConfig;
 		const client = yield* HttpClient.HttpClient;
+
 		// Follow cursors until the listing is complete; the page guard exists
 		// so a misbehaving server cannot loop us forever. JSON mode stays a
 		// single document: files accumulate and emit once after the loop.
@@ -229,12 +261,16 @@ export const list = Command.make('list', {}, () =>
 				? F
 				: never
 		> = [];
+
 		let lastPage: typeof FileListResponseSchema.Type | null = null;
 		let cursor: string | null = null;
 		let pages = 0;
+
 		do {
 			const params = new URLSearchParams();
+
 			if (cursor) params.set('cursor', cursor);
+
 			const result = yield* client
 				.execute(
 					apiRequest(
@@ -249,7 +285,9 @@ export const list = Command.make('list', {}, () =>
 						decodeBody(FileListResponseSchema, response)
 					)
 				);
+
 			lastPage = result;
+
 			if (wantsJson()) {
 				allFiles.push(...result.files);
 			} else {
@@ -259,15 +297,18 @@ export const list = Command.make('list', {}, () =>
 					);
 				}
 			}
+
 			cursor = result.nextCursor;
 			pages += 1;
 		} while (cursor !== null && pages < 500);
+
 		if (cursor !== null) {
 			return yield* new CliFailure({
 				message:
 					'Listing stopped after 500 pages with more remaining; the server may be misbehaving'
 			});
 		}
+
 		if (wantsJson() && lastPage !== null) {
 			yield* emit({ ...lastPage, files: allFiles, nextCursor: null });
 		}
@@ -277,6 +318,7 @@ export const list = Command.make('list', {}, () =>
 const filenameFromDisposition = (value: string | undefined) => {
 	if (!value) return undefined;
 	const encoded = /filename\*=UTF-8''([^;]+)/i.exec(value)?.[1];
+
 	if (encoded) {
 		try {
 			return basename(decodeURIComponent(encoded));
@@ -284,6 +326,7 @@ const filenameFromDisposition = (value: string | undefined) => {
 			return undefined;
 		}
 	}
+
 	return /filename="([^"]+)"/i.exec(value)?.[1];
 };
 
@@ -322,11 +365,13 @@ export const get = Command.make(
 			const config = yield* loadConfig.pipe(Effect.flatMap(withContentOrigin));
 			const client = yield* HttpClient.HttpClient;
 			const fs = yield* FileSystem.FileSystem;
+
 			if (Option.getOrUndefined(output) === '-' && wantsJson()) {
 				return yield* new CliFailure({
 					message: '`--json` cannot be combined with `--output -`'
 				});
 			}
+
 			const linkResponse = yield* client
 				.execute(
 					apiRequest(
@@ -336,23 +381,28 @@ export const get = Command.make(
 					)
 				)
 				.pipe(Effect.flatMap(ensureOk));
+
 			const link = yield* decodeBody(
 				FileContentLinkResponseSchema,
 				linkResponse
 			);
+
 			const downloadUrl = yield* trustedServerUrl(
 				link.url,
 				config,
 				'The download URL returned by the server'
 			);
+
 			const response = yield* client
 				.execute(HttpClientRequest.get(downloadUrl))
 				.pipe(Effect.flatMap(ensureOk));
+
 			const destination = Option.getOrElse(
 				output,
 				() =>
 					filenameFromDisposition(response.headers['content-disposition']) ?? id
 			);
+
 			if (destination === '-') {
 				yield* Stream.runForEach(response.stream, writeStdout);
 			} else {
@@ -376,6 +426,7 @@ export const rename = Command.make(
 		Effect.gen(function* () {
 			const config = yield* loadConfig;
 			const client = yield* HttpClient.HttpClient;
+
 			const response = yield* client
 				.execute(
 					apiRequest(
@@ -391,6 +442,7 @@ export const rename = Command.make(
 					)
 				)
 				.pipe(Effect.flatMap(ensureOk));
+
 			const result = yield* decodeBody(FileMutationResponseSchema, response);
 			yield* emit(
 				wantsJson()
@@ -410,6 +462,7 @@ export const tagSet = Command.make(
 		Effect.gen(function* () {
 			const config = yield* loadConfig;
 			const client = yield* HttpClient.HttpClient;
+
 			const response = yield* client
 				.execute(
 					apiRequest(
@@ -420,6 +473,7 @@ export const tagSet = Command.make(
 					)
 				)
 				.pipe(Effect.flatMap(ensureOk));
+
 			const result = yield* decodeBody(FileTagsResponseSchema, response);
 			yield* emit(
 				wantsJson()

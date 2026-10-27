@@ -27,6 +27,7 @@
 	const create = async () => {
 		if (!name.trim() || busy) return;
 		busy = true;
+
 		try {
 			const tag = await createTag(token, { name, color });
 			name = '';

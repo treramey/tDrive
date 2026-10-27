@@ -24,6 +24,7 @@ const EncodedBytes = Schema.String.check(
 			value.length % 4 === 1
 		)
 			return false;
+
 		return base64url(unbase64url(value)) === value;
 	})
 );

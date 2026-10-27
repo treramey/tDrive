@@ -46,6 +46,7 @@ const clearCookie = (cookies: Cookies, name: string) => {
 		sameSite: 'strict'
 	});
 };
+
 export const clearBrowserSession = (cookies: Cookies) =>
 	clearCookie(cookies, SESSION_COOKIE);
 
@@ -54,15 +55,18 @@ const respond = <A extends Response>(
 	program: Effect.Effect<A, AppError, AppServices>
 ) => {
 	event.setHeaders({ 'Cache-Control': 'private, no-store' });
+
 	return runEdgeWithEvent(
 		event,
 		Effect.gen(function* () {
 			const config = yield* AppConfig;
+
 			if (event.url.origin !== config.dashboardOrigin) {
 				return yield* new MisdirectedRequest({
 					message: 'Credentials are accepted only on the dashboard origin'
 				});
 			}
+
 			if (
 				event.request.method !== 'GET' &&
 				event.request.headers.get('origin') !== config.dashboardOrigin
@@ -72,6 +76,7 @@ const respond = <A extends Response>(
 					message: 'The request origin is not allowed'
 				});
 			}
+
 			return yield* program;
 		})
 	);
@@ -85,13 +90,16 @@ const managementSession = (event: RequestEvent) =>
 				message: 'Sign in with the passcode to manage passkeys'
 			});
 		}
+
 		const auth = yield* Auth;
 		yield* authorizeRequest(auth, event.request, event.url, event.cookies);
 		const token = event.cookies.get(SESSION_COOKIE);
+
 		if (!token)
 			return yield* new Unauthorized({
 				message: 'A live browser session is required'
 			});
+
 		return token;
 	});
 
@@ -102,6 +110,7 @@ const consume = (
 	Effect.gen(function* () {
 		const guard = yield* AuthGuard;
 		const decision = yield* guard.consume(policy, event.getClientAddress());
+
 		return decision.allowed ? null : authRateLimitResponse(decision);
 	});
 
@@ -113,9 +122,12 @@ const passwordControlled = <A>(
 		const guard = yield* AuthGuard;
 		const client = event.getClientAddress();
 		const lock = yield* guard.checkPasscodeLock(client);
+
 		if (!lock.allowed) return authRateLimitResponse(lock);
 		const rate = yield* guard.consume('passcodeLogin', client);
+
 		if (!rate.allowed) return authRateLimitResponse(rate);
+
 		return yield* program.pipe(
 			Effect.matchEffect({
 				onSuccess: (value) =>
@@ -126,6 +138,7 @@ const passwordControlled = <A>(
 						failure.message !== 'Passcode is incorrect'
 					)
 						return Effect.fail(failure);
+
 					return guard
 						.recordPasscodeFailure(client)
 						.pipe(
@@ -155,6 +168,7 @@ const promptResponse = (
 			maxAge: PASSKEY_TTL_SECONDS
 		}
 	);
+
 	return Response.json({
 		ceremonyId: prompt.ceremonyId,
 		options: prompt.options
@@ -166,6 +180,7 @@ export const passkeyLoginOptionsResponse: RequestHandler = (event) =>
 		event,
 		Effect.gen(function* () {
 			const limited = yield* consume(event, 'passkeyBegin');
+
 			if (limited) return limited;
 			yield* decodeJson(
 				event.request,
@@ -173,6 +188,7 @@ export const passkeyLoginOptionsResponse: RequestHandler = (event) =>
 				'Passkey request is invalid'
 			);
 			const auth = yield* Auth;
+
 			return promptResponse(event, yield* auth.startPasskey({ kind: 'login' }));
 		})
 	);
@@ -183,17 +199,22 @@ export const passkeyEnrollmentOptionsResponse: RequestHandler = (event) =>
 		Effect.gen(function* () {
 			const sessionToken = yield* managementSession(event);
 			const limited = yield* consume(event, 'passkeyBegin');
+
 			if (limited) return limited;
+
 			const input = yield* decodeJson(
 				event.request,
 				PasskeyEnrollSchema,
 				'A name and current passcode are required'
 			);
+
 			const auth = yield* Auth;
+
 			const result = yield* passwordControlled(
 				event,
 				auth.startPasskey({ kind: 'enroll', sessionToken, ...input })
 			);
+
 			return result instanceof Response
 				? result
 				: promptResponse(event, result);
@@ -205,19 +226,24 @@ export const passkeyLoginResponse: RequestHandler = (event) =>
 		event,
 		Effect.gen(function* () {
 			const limited = yield* consume(event, 'passkeyFinish');
+
 			if (limited) return limited;
+
 			const input = yield* decodeJson(
 				event.request,
 				PasskeyLoginSubmission,
 				'Passkey response is invalid'
 			);
+
 			const cookieName = passkeyCookieName(input.ceremonyId);
 			const binding = event.cookies.get(cookieName);
+
 			if (!binding)
 				return yield* new Unauthorized({
 					message: 'Passkey attempt is missing. Start again.'
 				});
 			const auth = yield* Auth;
+
 			const token = yield* auth
 				.loginWithPasskey({ ...input, binding })
 				.pipe(
@@ -225,7 +251,9 @@ export const passkeyLoginResponse: RequestHandler = (event) =>
 						Effect.sync(() => clearCookie(event.cookies, cookieName))
 					)
 				);
+
 			setBrowserSession(event.cookies, token);
+
 			return Response.json({ ok: true });
 		})
 	);
@@ -236,14 +264,18 @@ export const passkeyEnrollmentResponse: RequestHandler = (event) =>
 		Effect.gen(function* () {
 			const sessionToken = yield* managementSession(event);
 			const limited = yield* consume(event, 'passkeyFinish');
+
 			if (limited) return limited;
+
 			const input = yield* decodeJson(
 				event.request,
 				PasskeyEnrollSubmission,
 				'Passkey response is invalid'
 			);
+
 			const cookieName = passkeyCookieName(input.ceremonyId);
 			const binding = event.cookies.get(cookieName);
+
 			if (!binding)
 				return yield* new Unauthorized({
 					message: 'Passkey attempt is missing. Start again.'
@@ -256,6 +288,7 @@ export const passkeyEnrollmentResponse: RequestHandler = (event) =>
 						Effect.sync(() => clearCookie(event.cookies, cookieName))
 					)
 				);
+
 			return Response.json({ ok: true });
 		})
 	);
@@ -266,6 +299,7 @@ export const passkeyInventoryResponse: RequestHandler = (event) =>
 		Effect.gen(function* () {
 			const session = yield* managementSession(event);
 			const auth = yield* Auth;
+
 			return Response.json({ passkeys: yield* auth.listPasskeys(session) });
 		})
 	);
@@ -275,6 +309,7 @@ export const passkeyRemovalResponse: RequestHandler = (event) =>
 		event,
 		Effect.gen(function* () {
 			const sessionToken = yield* managementSession(event);
+
 			const id = yield* Schema.decodeUnknownEffect(PasskeyIdSchema)(
 				event.params.id
 			).pipe(
@@ -286,18 +321,24 @@ export const passkeyRemovalResponse: RequestHandler = (event) =>
 						})
 				)
 			);
+
 			const input = yield* decodeJson(
 				event.request,
 				PasscodeLoginSchema,
 				'The current passcode is required'
 			);
+
 			const auth = yield* Auth;
+
 			const result = yield* passwordControlled(
 				event,
 				auth.removePasskey({ sessionToken, id, ...input })
 			);
+
 			if (result instanceof Response) return result;
+
 			if (result.signedOut) clearBrowserSession(event.cookies);
+
 			return Response.json(result);
 		})
 	);

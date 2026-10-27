@@ -19,6 +19,7 @@ export const GET: RequestHandler = ({ cookies, request, url }) =>
 			const auth = yield* Auth;
 			const tags = yield* Tags;
 			yield* authorizeRequest(auth, request, url, cookies);
+
 			return Response.json({ tags: yield* tags.list });
 		})
 	);
@@ -29,9 +30,11 @@ export const POST: RequestHandler = ({ cookies, request, url }) =>
 			const auth = yield* Auth;
 			const tags = yield* Tags;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
+
 			const tag = yield* readCreate(request).pipe(
 				Effect.flatMap((input) => tags.create(input))
 			);
+
 			return Response.json({ tag }, { status: 201 });
 		})
 	);

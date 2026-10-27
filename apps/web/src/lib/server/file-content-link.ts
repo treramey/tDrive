@@ -25,10 +25,12 @@ export const buildFileContentLink = async (
 		`/f/${encodeURIComponent(content.file.id)}`,
 		config.contentOrigin
 	);
+
 	if (content.file.public && !requireGrant) {
 		if (requestedVersion !== undefined) {
 			url.searchParams.set('v', String(content.file.version));
 		}
+
 		return {
 			url: url.href,
 			expiresAt: null,
@@ -41,6 +43,7 @@ export const buildFileContentLink = async (
 	url.searchParams.set('v', String(content.file.version));
 	url.searchParams.set('e', String(privateGrant.expiresAtSeconds));
 	url.searchParams.set('g', privateGrant.signature);
+
 	return {
 		url: url.href,
 		expiresAt: new Date(privateGrant.expiresAtSeconds * 1_000).toISOString(),
@@ -60,12 +63,14 @@ export const resolveFileContentLink = (
 		const files = yield* Files;
 		const grantSecrets = yield* GrantSecrets;
 		const resolveCurrentVersion = includeUnavailable || requireGrant;
+
 		const resolved = yield* files.findContent(
 			id,
 			resolveCurrentVersion ? undefined : version,
 			includeUnavailable,
 			true
 		);
+
 		if (resolved.file.kind === 'site') {
 			if (version !== undefined && version !== resolved.file.version) {
 				return yield* new InvalidRequest({
@@ -73,6 +78,7 @@ export const resolveFileContentLink = (
 					message: 'Only the current site version can be previewed'
 				});
 			}
+
 			if (!includeUnavailable && !requireGrant) {
 				return {
 					url: new URL(
@@ -84,15 +90,18 @@ export const resolveFileContentLink = (
 					public: true
 				};
 			}
+
 			const grant = yield* grantSecrets.mint({
 				contentOrigin: config.contentOrigin,
 				fileId: resolved.file.id,
 				version: resolved.file.version
 			});
+
 			const url = new URL(
 				`/s/${encodeURIComponent(resolved.file.id)}/@grant/${resolved.file.version}/${grant.expiresAtSeconds}/${grant.signature}/`,
 				config.contentOrigin
 			);
+
 			return {
 				url: url.href,
 				expiresAt: new Date(grant.expiresAtSeconds * 1_000).toISOString(),
@@ -100,12 +109,14 @@ export const resolveFileContentLink = (
 				public: false
 			};
 		}
+
 		const content =
 			resolveCurrentVersion &&
 			version !== undefined &&
 			version !== resolved.file.version
 				? yield* files.findContent(id, version, includeUnavailable)
 				: resolved;
+
 		const grant =
 			content.file.public && !includeUnavailable && !requireGrant
 				? undefined
@@ -114,6 +125,7 @@ export const resolveFileContentLink = (
 						fileId: content.file.id,
 						version: content.file.version
 					});
+
 		return yield* Effect.promise(() =>
 			buildFileContentLink(
 				config,

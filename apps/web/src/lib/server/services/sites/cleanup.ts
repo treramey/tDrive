@@ -1,10 +1,10 @@
 import { Effect } from 'effect';
 import type { SiteInternals } from './internals';
-import type { SitesShape } from './types';
+import type { SitesService } from './types';
 
 export const cleanupOps = (
 	internals: SiteInternals
-): Pick<SitesShape, 'sweepLifecycle'> => {
+): Pick<SitesService, 'sweepLifecycle'> => {
 	const { sweepExpiredSessions, sweepPendingDeletes } = internals;
 
 	return {
@@ -13,6 +13,7 @@ export const cleanupOps = (
 		) {
 			const expired = yield* sweepExpiredSessions(limit);
 			const pending = yield* sweepPendingDeletes(limit);
+
 			return expired + pending;
 		})
 	};

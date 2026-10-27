@@ -17,6 +17,7 @@ afterEach(() => {
 describe('blob compensation', () => {
 	it('preserves the commit failure after a failed delete is queued', async () => {
 		const queued = vi.fn(() => Effect.void);
+
 		const failure = await Effect.runPromise(
 			Effect.flip(
 				compensateBlobFailure(
@@ -34,6 +35,7 @@ describe('blob compensation', () => {
 
 	it('preserves the commit failure when both delete and queue fail', async () => {
 		const report = vi.fn();
+
 		const failure = await Effect.runPromise(
 			Effect.flip(
 				compensateBlobFailure(
@@ -58,6 +60,7 @@ describe('blob compensation', () => {
 				'utf8'
 			)
 		);
+
 		const command = deferredBlobDeleteCommand(
 			'v/file-id/orphan',
 			'file-id',

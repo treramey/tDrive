@@ -6,16 +6,18 @@ import { cleanupOps } from './sites/cleanup';
 import { createInternals } from './sites/internals';
 import { readOps } from './sites/read';
 import { sessionOps } from './sites/sessions';
-import type { SitesShape } from './sites/types';
+import type { SitesService } from './sites/types';
 
 export type {
 	SiteSession,
 	SiteCommitResult,
 	SiteContent,
-	SitesShape
+	SitesService
 } from './sites/types';
 
-export class Sites extends Context.Service<Sites, SitesShape>()('app/Sites') {}
+export class Sites extends Context.Service<Sites, SitesService>()(
+	'app/Sites'
+) {}
 
 const makeSites = Effect.gen(function* () {
 	const db = yield* Db;

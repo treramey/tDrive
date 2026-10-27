@@ -16,6 +16,7 @@ afterEach(() => {
 const makeDatabase = () => {
 	const database = new DatabaseSync(':memory:');
 	databases.push(database);
+
 	for (const name of [
 		'0001_init.sql',
 		'0002_tags_search.sql',
@@ -26,6 +27,7 @@ const makeDatabase = () => {
 	]) {
 		database.exec(migration(name));
 	}
+
 	return database;
 };
 
@@ -34,11 +36,14 @@ const runCommands = (
 	commands: ReadonlyArray<PurgeSqlCommand>
 ) => {
 	database.exec('BEGIN');
+
 	try {
 		const changes = commands.map((command) =>
 			Number(database.prepare(command.sql).run(...command.bindings).changes)
 		);
+
 		database.exec('COMMIT');
+
 		return changes;
 	} catch (cause) {
 		database.exec('ROLLBACK');
@@ -121,6 +126,7 @@ const seedPurgingFile = (
 				(?, ?, 1, 1, 8, 18)`
 		)
 		.run(`${fileId}:attempt:0`, fileId, `${fileId}:attempt:1`, fileId);
+
 	if (kind === 'site') {
 		database
 			.prepare(
@@ -170,11 +176,13 @@ describe('canonical purge completion SQL', () => {
 				fileId,
 				'2026-07-27T00:01:00.000Z'
 			);
+
 			const forcedFailure = {
 				sql: `INSERT INTO pending_vector_deletes (vector_id, queued_at)
 					VALUES (?, 'forced failure')`,
 				bindings: [`${fileId}:attempt:0`]
 			} satisfies PurgeSqlCommand;
+
 			expect(() =>
 				runCommands(database, [
 					...commands.slice(0, 3),
@@ -201,10 +209,12 @@ describe('canonical purge completion SQL', () => {
 			const database = makeDatabase();
 			const fileId = `purge-${kind}-success`;
 			seedPurgingFile(database, fileId, kind);
+
 			const changes = runCommands(
 				database,
 				purgeCompletionCommands(fileId, '2026-07-27T00:01:00.000Z')
 			);
+
 			expect(changes.at(-2)).toBe(1);
 			expect(changes.at(-1)).toBe(1);
 			expect(counts(database, fileId)).toEqual({

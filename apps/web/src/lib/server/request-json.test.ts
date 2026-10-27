@@ -11,14 +11,17 @@ const options = {
 
 const readFailure = async (request: Request) => {
 	const exit = await Effect.runPromiseExit(readBoundedJson(request, options));
+
 	if (Exit.isSuccess(exit)) {
 		throw new Error('Expected bounded JSON decoding to fail');
 	}
+
 	for (const reason of exit.cause.reasons) {
 		if (Cause.isFailReason(reason) && reason.error instanceof InvalidRequest) {
 			return reason.error;
 		}
 	}
+
 	throw new Error('Expected an InvalidRequest failure');
 };
 
@@ -48,6 +51,7 @@ describe('bounded JSON requests', () => {
 				options
 			)
 		);
+
 		expect(accepted).toEqual({});
 
 		const oversized = await readFailure(
@@ -56,6 +60,7 @@ describe('bounded JSON requests', () => {
 				body: '{"key":"too large"}'
 			})
 		);
+
 		expect(oversized.status).toBe(413);
 	});
 
@@ -73,6 +78,7 @@ describe('bounded JSON requests', () => {
 
 	it('accepts valid JSON whose actual bytes are exactly at the limit', async () => {
 		const json = '{"a":12}';
+
 		const request = new Request(
 			'https://drive.example.com/api/sites/sessions',
 			{
@@ -111,7 +117,9 @@ describe('bounded JSON requests', () => {
 				body: '{}'
 			}
 		);
+
 		const reader = request.body?.getReader();
+
 		if (reader === undefined) {
 			throw new Error('Expected the request to have a body');
 		}

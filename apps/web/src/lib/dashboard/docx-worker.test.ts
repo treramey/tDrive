@@ -23,12 +23,15 @@ beforeAll(async () => {
 			}
 		}
 	});
+
 	for (const bundle of Array.isArray(output) ? output : [output]) {
 		if (!('output' in bundle)) throw new Error('Expected worker bundle');
+
 		for (const chunk of bundle.output) {
 			if (chunk.type === 'chunk' && chunk.isEntry) workerCode = chunk.code;
 		}
 	}
+
 	if (!workerCode) throw new Error('Missing worker bundle');
 });
 
@@ -38,6 +41,7 @@ const convert = async (bytes: ArrayBuffer): Promise<DocxWorkerResult> => {
 			onmessage: (_event: { data: ArrayBuffer }) => {},
 			postMessage: resolve
 		};
+
 		runInNewContext(
 			'self = globalThis;\n' + workerCode,
 			Object.assign(worker, {
@@ -62,8 +66,10 @@ describe('browser DOCX worker with real Mammoth', () => {
 		const fixture = await readFile(
 			resolve('src/lib/dashboard/fixtures/preview.docx')
 		);
+
 		const result = await convert(Uint8Array.from(fixture).buffer);
 		expect(result.kind).toBe('converted');
+
 		if (result.kind !== 'converted') throw new Error('Conversion failed');
 		expect(result.hasErrors).toBe(false);
 		expect(projectDocx(result.html)).toEqual([
@@ -83,9 +89,11 @@ describe('browser DOCX worker with real Mammoth', () => {
 		expect(
 			await convert(new TextEncoder().encode('not a document').buffer)
 		).toEqual({ kind: 'error' });
+
 		const fixture = await readFile(
 			resolve('src/lib/dashboard/fixtures/preview.docx')
 		);
+
 		expect(
 			await convert(Uint8Array.from(fixture.subarray(0, 100)).buffer)
 		).toEqual({ kind: 'error' });
@@ -101,6 +109,7 @@ describe('browser DOCX worker with real Mammoth', () => {
 		const fixture = await readFile(
 			resolve('src/lib/dashboard/fixtures/oversized-output.docx')
 		);
+
 		expect(await convert(Uint8Array.from(fixture).buffer)).toEqual({
 			kind: 'error'
 		});

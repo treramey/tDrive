@@ -1,4 +1,4 @@
-import { Effect, Schema } from 'effect';
+import { Effect, Schema, Data } from 'effect';
 import { InvalidRequest } from './errors';
 
 interface BoundedJsonOptions {
@@ -12,41 +12,49 @@ type BodyReadResult =
 	| { readonly _tag: 'TooLarge' }
 	| { readonly _tag: 'ReadFailure' };
 
+const BodyReadResult = Data.taggedEnum<BodyReadResult>();
+
 const readBodyAtMost = async (
 	request: Request,
 	maxBytes: number
 ): Promise<BodyReadResult> => {
 	if (request.body === null) {
-		return { _tag: 'Success', bytes: new Uint8Array() };
+		return BodyReadResult.Success({ bytes: new Uint8Array() });
 	}
 
 	let reader: ReadableStreamDefaultReader<Uint8Array>;
+
 	try {
 		reader = request.body.getReader();
 	} catch {
-		return { _tag: 'ReadFailure' };
+		return BodyReadResult.ReadFailure();
 	}
+
 	const chunks: Array<Uint8Array> = [];
 	let totalBytes = 0;
 
 	try {
 		while (true) {
 			const next = await reader.read();
+
 			if (next.done) break;
 
 			totalBytes += next.value.byteLength;
+
 			if (totalBytes > maxBytes) {
 				try {
 					await reader.cancel();
 				} catch {
 					// The size violation remains the primary request failure.
 				}
-				return { _tag: 'TooLarge' };
+
+				return BodyReadResult.TooLarge();
 			}
+
 			chunks.push(next.value);
 		}
 	} catch {
-		return { _tag: 'ReadFailure' };
+		return BodyReadResult.ReadFailure();
 	} finally {
 		try {
 			reader.releaseLock();
@@ -57,11 +65,13 @@ const readBodyAtMost = async (
 
 	const bytes = new Uint8Array(totalBytes);
 	let offset = 0;
+
 	for (const chunk of chunks) {
 		bytes.set(chunk, offset);
 		offset += chunk.byteLength;
 	}
-	return { _tag: 'Success', bytes };
+
+	return BodyReadResult.Success({ bytes });
 };
 
 export const readBoundedJson = (
@@ -73,8 +83,10 @@ export const readBoundedJson = (
 		// before any bytes are read, but the header is not required: the
 		// streaming reader below enforces maxBytes for chunked bodies too.
 		const contentLengthHeader = request.headers.get('content-length');
+
 		if (contentLengthHeader !== null) {
 			const contentLength = Number(contentLengthHeader);
+
 			if (
 				!Number.isSafeInteger(contentLength) ||
 				contentLength < 0 ||
@@ -88,27 +100,26 @@ export const readBoundedJson = (
 		}
 
 		const body = yield* Effect.promise(() => readBodyAtMost(request, maxBytes));
-		switch (body._tag) {
-			case 'TooLarge':
-				return yield* new InvalidRequest({
-					status: 413,
-					message: invalidLengthMessage
-				});
-			case 'ReadFailure':
-				return yield* new InvalidRequest({
-					status: 400,
-					message: invalidJsonMessage
-				});
-			case 'Success':
-				return yield* Effect.try({
-					try: (): unknown => JSON.parse(new TextDecoder().decode(body.bytes)),
-					catch: () =>
-						new InvalidRequest({
-							status: 400,
-							message: invalidJsonMessage
-						})
-				});
-		}
+
+		return yield* BodyReadResult.$match(body, {
+			TooLarge: () =>
+				Effect.fail(
+					new InvalidRequest({ status: 413, message: invalidLengthMessage })
+				),
+			ReadFailure: () =>
+				Effect.fail(
+					new InvalidRequest({ status: 400, message: invalidJsonMessage })
+				),
+			Success: ({ bytes }) =>
+				Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
+					new TextDecoder().decode(bytes)
+				).pipe(
+					Effect.mapError(
+						() =>
+							new InvalidRequest({ status: 400, message: invalidJsonMessage })
+					)
+				)
+		});
 	});
 
 export const DEFAULT_JSON_BODY_LIMIT = 16 * 1024;

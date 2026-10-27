@@ -10,6 +10,7 @@ import {
 } from './thumbnail-storage';
 
 const databases: DatabaseSync[] = [];
+
 const migration = (...names: ReadonlyArray<string>) =>
 	names
 		.map((name) =>
@@ -41,6 +42,7 @@ const makeDatabase = () => {
 			) VALUES ('file-1', 1, 'v/file-1/one', 80, 'image/jpeg', ?)`
 		)
 		.run('2026-08-13T00:00:00.000Z');
+
 	return database;
 };
 
@@ -48,6 +50,8 @@ const quotaDatabase = (database: DatabaseSync): StorageQuotaDatabase => ({
 	prepare: (query) => ({
 		first: async <T>() => {
 			await Promise.resolve();
+
+			// SAFETY: this D1-compatible adapter returns the query's row type; the quota service validates its numeric result.
 			return (database.prepare(query).get() as T | undefined) ?? null;
 		}
 	})
@@ -76,6 +80,7 @@ describe('dashboard thumbnail storage', () => {
 		database
 			.prepare("UPDATE files SET purge_state = 'pending' WHERE id = 'file-1'")
 			.run();
+
 		const result = run(
 			database,
 			commitThumbnailStorageCommand(
@@ -112,6 +117,7 @@ describe('dashboard thumbnail storage', () => {
 
 	it("does not let a losing writer replace another writer's thumbnail", () => {
 		const database = makeDatabase();
+
 		const winner = run(
 			database,
 			commitThumbnailStorageCommand(
@@ -122,6 +128,7 @@ describe('dashboard thumbnail storage', () => {
 				null
 			)
 		);
+
 		const loser = run(
 			database,
 			commitThumbnailStorageCommand(
@@ -162,7 +169,7 @@ describe('dashboard thumbnail storage', () => {
 
 		await expect(
 			Effect.runPromise(ensureStorageQuota(quotaDatabase(database), 105, 6))
-		).rejects.toMatchObject({ _tag: 'InvalidRequest', status: 413 });
+		).rejects.toMatchObject({ name: 'InvalidRequest', status: 413 });
 	});
 
 	it('charges only the growth when replacing missing derivative bytes', () => {

@@ -8,6 +8,7 @@ export const authRateLimitResponse = (
 		decision.reason === 'lockout'
 			? 'Too many incorrect passcode attempts. Try again later.'
 			: rateLimitMessage;
+
 	return Response.json(
 		{ message },
 		{

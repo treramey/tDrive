@@ -4,7 +4,7 @@ export class Db extends Context.Service<Db, D1Database>()('app/Db') {}
 
 export class Bucket extends Context.Service<Bucket, R2Bucket>()('app/Bucket') {}
 
-export interface AuthGuardStoreShape {
+export interface AuthGuardStoreService {
 	readonly get: (key: string) => Promise<string | null>;
 	readonly put: (
 		key: string,
@@ -16,5 +16,5 @@ export interface AuthGuardStoreShape {
 
 export class AuthGuardStore extends Context.Service<
 	AuthGuardStore,
-	AuthGuardStoreShape
+	AuthGuardStoreService
 >()('app/AuthGuardStore') {}

@@ -41,6 +41,7 @@ describe('MCP error mapping', () => {
 				})
 			)
 		);
+
 		expect(failure.message).toBe('Storage unavailable');
 		expect(failure.message).not.toContain('secret');
 	});

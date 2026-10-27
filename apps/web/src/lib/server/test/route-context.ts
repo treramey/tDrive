@@ -1,16 +1,39 @@
+import { Schema } from 'effect';
 import type { Cookies, RequestEvent } from '@sveltejs/kit';
-import { vi } from 'vitest';
+import { with_request_store } from '@sveltejs/kit/internal/server';
 
 export const DASHBOARD_ORIGIN = 'http://localhost:5173';
 
-// Route handlers read the event through two paths: runEdgeWithEvent takes
-// the event directly, and runEdge calls SvelteKit's getRequestEvent() —
-// which vitest resolves to this module via the vi.mock('$app/server') in
-// the test file.
-let currentEvent: RequestEvent | undefined;
-
-export const setRequestEvent = (event: RequestEvent) => {
-	currentEvent = event;
+const noopSpan: RequestEvent['tracing']['root'] = {
+	spanContext: () => ({
+		traceId: '00000000000000000000000000000000',
+		spanId: '0000000000000000',
+		traceFlags: 0
+	}),
+	setAttribute() {
+		return this;
+	},
+	setAttributes() {
+		return this;
+	},
+	addEvent() {
+		return this;
+	},
+	addLink() {
+		return this;
+	},
+	addLinks() {
+		return this;
+	},
+	setStatus() {
+		return this;
+	},
+	updateName() {
+		return this;
+	},
+	end() {},
+	isRecording: () => false,
+	recordException() {}
 };
 
 class TestCookieStore implements Cookies {
@@ -48,25 +71,26 @@ export interface RouteTestContext {
 	readonly drainWaitUntil: () => Promise<void>;
 }
 
-// SvelteKit types RequestEvent per route with phantom params, which a
-// generic test event can never satisfy; the runtime shape is what matters,
-// so this is the single sanctioned cast point.
 export const call = async <E, R>(
 	handler: (event: E) => R,
 	event: RequestEvent
-): Promise<R extends Promise<infer A> ? A : R> =>
-	(handler as (event: RequestEvent) => R)(event) as Promise<
-		R extends Promise<infer A> ? A : R
-	>;
+): Promise<Awaited<R>> => {
+	// SAFETY: generated handlers specialize route params; the test event supplies those params for the route under test.
+	const routeHandler = handler as (event: RequestEvent) => R;
+
+	return await with_request_store({ event }, () => routeHandler(event));
+};
 
 export const createRouteContext = async (): Promise<RouteTestContext> => {
 	const { getTestPlatform } = await import('./platform');
 	const proxy = await getTestPlatform();
-	const platformEnv = proxy.env as Env;
+	const platformEnv = proxy.env;
+
 	const env = {
 		...platformEnv,
 		PASSCODE: platformEnv.PASSCODE ?? 'tdrive-route-test-passcode'
 	};
+
 	const cookies = new TestCookieStore();
 
 	const build = ({
@@ -83,16 +107,17 @@ export const createRouteContext = async (): Promise<RouteTestContext> => {
 		params?: Record<string, string>;
 	}): RequestEvent => {
 		const url = new URL(path, DASHBOARD_ORIGIN);
+
 		// Upload routes require Content-Length (quota checks); undici only
 		// sets it for fixed-length bodies, so supply it for strings here.
-		const withLength =
-			typeof body !== 'string'
-				? headers
-				: {
-						'content-length': String(new TextEncoder().encode(body).byteLength),
-						...headers
-					};
-		const request = new Request(url, {
+		const withLength = !Schema.is(Schema.String)(body)
+			? headers
+			: {
+					'content-length': String(new TextEncoder().encode(body).byteLength),
+					...headers
+				};
+
+		const requestInit = {
 			method,
 			headers: {
 				origin: DASHBOARD_ORIGIN,
@@ -100,8 +125,13 @@ export const createRouteContext = async (): Promise<RouteTestContext> => {
 			},
 			body: body ?? undefined,
 			duplex: body instanceof ReadableStream ? 'half' : undefined
-		} as RequestInit);
+		} satisfies RequestInit & { duplex: 'half' | undefined };
+
+		const request = new Request(url, requestInit);
+
 		const event = {
+			isRemoteRequest: false,
+			tracing: { enabled: false, root: noopSpan, current: noopSpan },
 			cookies,
 			getClientAddress: () => '127.0.0.1',
 			params,
@@ -111,10 +141,17 @@ export const createRouteContext = async (): Promise<RouteTestContext> => {
 					waitUntil: (promise: Promise<unknown>) => {
 						waitUntilQueue.push(promise);
 					},
-					passThroughOnException: () => {}
+					passThroughOnException: () => {},
+					props: {},
+					get exports(): ExecutionContext['exports'] {
+						throw new Error('Worker exports are not used by route fixtures');
+					},
+					get tracing(): ExecutionContext['tracing'] {
+						throw new Error('Worker tracing is not used by route fixtures');
+					}
 				},
 				caches: globalThis.caches,
-				cf: undefined
+				cf: proxy.cf
 			},
 			request,
 			url,
@@ -124,8 +161,8 @@ export const createRouteContext = async (): Promise<RouteTestContext> => {
 			isDataRequest: false,
 			locals: {},
 			fetch: globalThis.fetch
-		} as unknown as RequestEvent;
-		setRequestEvent(event);
+		} satisfies RequestEvent;
+
 		return event;
 	};
 
@@ -139,12 +176,3 @@ export const createRouteContext = async (): Promise<RouteTestContext> => {
 		}
 	};
 };
-
-export const mockGetRequestEvent = () => ({
-	getRequestEvent: vi.fn(() => {
-		if (!currentEvent) {
-			throw new Error('No request event registered for this test');
-		}
-		return currentEvent;
-	})
-});

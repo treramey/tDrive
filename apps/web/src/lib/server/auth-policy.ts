@@ -1,3 +1,4 @@
+import { hasAsciiControlCharacters } from '@tdrive/shared';
 import { InvalidRequest } from './errors';
 
 export const SESSION_COOKIE = '__Host-adrive-session';
@@ -9,45 +10,53 @@ const BEARER_SCHEME = /^Bearer\s+(\S+)/i;
 
 export const bearerToken = (authorization: string | null | undefined) => {
 	if (authorization == null) return '';
+
 	return BEARER_SCHEME.exec(authorization.trim())?.[1] ?? '';
 };
 
 export const normalizeApiKeyName = (value: string) => {
 	const name = value.normalize('NFKC').trim().replace(/\s+/g, ' ');
-	if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
+
+	if (!name || name.length > 80 || hasAsciiControlCharacters(name)) {
 		throw new InvalidRequest({
 			status: 400,
 			message: 'Credential name is invalid'
 		});
 	}
+
 	return name;
 };
 
 export const normalizeUserCode = (value: string) => {
 	const code = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
 	if (!/^[A-Z0-9]{8}$/.test(code)) {
 		throw new InvalidRequest({
 			status: 400,
 			message: 'Device approval code is invalid'
 		});
 	}
+
 	return `${code.slice(0, 4)}-${code.slice(4)}`;
 };
 
 export const validateExpiration = (value: string | null, now = new Date()) => {
 	if (value === null || value.trim() === '') return null;
 	const date = new Date(value);
+
 	if (!Number.isFinite(date.getTime()) || date.getTime() <= now.getTime()) {
 		throw new InvalidRequest({
 			status: 400,
 			message: 'Expiration must be a future ISO-8601 timestamp'
 		});
 	}
+
 	return date.toISOString();
 };
 
 export const shouldCountDownload = (rangeHeader: string | null) => {
 	if (rangeHeader === null) return true;
+
 	return /^bytes=0-(?:\d*)$/i.test(rangeHeader.trim());
 };
 
@@ -64,6 +73,7 @@ export const shouldTouchLastUsed = (
 ) => {
 	if (!lastUsedAt) return true;
 	const then = Date.parse(lastUsedAt);
+
 	return (
 		!Number.isFinite(then) ||
 		now.getTime() - then >= LAST_USED_TOUCH_INTERVAL_MS
@@ -84,6 +94,7 @@ export const PASSKEY_USER_VERIFICATION = 'required';
 export const passkeyRelyingParty = (origin: string) => {
 	const url = new URL(origin);
 	const hostname = url.hostname;
+
 	if (
 		url.username ||
 		url.password ||
@@ -100,6 +111,7 @@ export const passkeyRelyingParty = (origin: string) => {
 			message: 'Passkeys require HTTPS or localhost. Use the passcode.'
 		});
 	}
+
 	return { origin, id: hostname };
 };
 
@@ -110,5 +122,6 @@ export const passkeyCookieName = (id: string) => {
 			message: 'Passkey attempt is invalid'
 		});
 	}
+
 	return `__Host-adrive-wa-${id}`;
 };

@@ -10,6 +10,7 @@ if (!url || !token) {
 
 const parseBody = async (response) => {
 	const text = await response.text();
+
 	const payload = text.startsWith('event:')
 		? text
 				.split('\n')
@@ -17,7 +18,9 @@ const parseBody = async (response) => {
 				.map((line) => line.slice(5).trim())
 				.find((line) => line.startsWith('{'))
 		: text;
+
 	if (!payload) throw new Error(`MCP response had no JSON payload: ${text}`);
+
 	return JSON.parse(payload);
 };
 
@@ -36,6 +39,7 @@ const rpc = async (method, params, id) => {
 			params
 		})
 	});
+
 	return { status: response.status, body: await parseBody(response) };
 };
 
@@ -55,12 +59,14 @@ if (initialize.status !== 200 || initialize.body.error) {
 }
 
 const listed = await rpc('tools/list', {}, 2);
+
 if (listed.status !== 200 || listed.body.error) {
 	console.error('tools/list failed', listed.status, listed.body);
 	process.exit(1);
 }
 
 const whoami = await rpc('tools/call', { name: 'whoami', arguments: {} }, 3);
+
 if (whoami.status !== 200 || whoami.body.error) {
 	console.error('whoami failed', whoami.status, whoami.body);
 	process.exit(1);
@@ -68,6 +74,7 @@ if (whoami.status !== 200 || whoami.body.error) {
 
 const tools = (listed.body.result?.tools ?? []).map((tool) => tool.name);
 const text = whoami.body.result?.content?.[0]?.text;
+
 console.log(
 	JSON.stringify(
 		{

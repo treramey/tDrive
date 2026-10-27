@@ -25,8 +25,10 @@
 		readonly sourceValue: string;
 		readonly nextValue: string;
 	}>();
+
 	let pending = $state(false);
 	let generation = 0;
+
 	const currentValue = $derived(
 		optimistic?.sourceValue === value ? optimistic.nextValue : value
 	);
@@ -37,8 +39,10 @@
 
 	const select = async (color: string) => {
 		if (pending || color === currentValue) return;
+
 		if (!onchange) {
 			value = color;
+
 			return;
 		}
 
@@ -46,17 +50,24 @@
 		const ownGeneration = ++generation;
 		optimistic = { sourceValue, nextValue: color };
 		pending = true;
+
 		try {
 			const result = await onchange(color);
+
 			if (ownGeneration !== generation) return;
+
 			if (value !== sourceValue) {
 				optimistic = undefined;
+
 				return;
 			}
+
 			if (result === false) {
 				optimistic = undefined;
+
 				return;
 			}
+
 			value = color;
 			optimistic = undefined;
 		} catch {

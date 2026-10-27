@@ -5,6 +5,7 @@ import { applySecurityHeaders } from '$lib/server/security-headers';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const env = event.platform?.env;
+
 	if (!env) throw new Error('Cloudflare bindings unavailable');
 
 	const originConfig = {
@@ -18,6 +19,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (cause instanceof MisdirectedRequest) {
 			return new Response(cause.message, { status: 421 });
 		}
+
 		throw cause;
 	}
 

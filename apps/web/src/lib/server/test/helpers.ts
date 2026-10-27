@@ -1,12 +1,20 @@
 import { Effect, Schema } from 'effect';
-import { FileListResponseSchema, type FileListResponse } from '@tdrive/shared';
+import {
+	FileListResponseSchema,
+	UploadResponseSchema,
+	FileMutationResponseSchema,
+	type FileListResponse,
+	type FileMutation
+} from '@tdrive/shared';
 import { call, type RouteTestContext } from './route-context';
 
 // Use the real local dev passcode when present, otherwise the isolated
 // route context supplies a safe test-only fallback for clean checkouts.
 const passcode = (ctx: RouteTestContext) => {
 	const value = ctx.env.PASSCODE;
+
 	if (!value) throw new Error('PASSCODE missing from platform proxy env');
+
 	return value;
 };
 
@@ -16,6 +24,7 @@ const passcode = (ctx: RouteTestContext) => {
 export const login = async (ctx: RouteTestContext) => {
 	if (ctx.cookies.get('__Host-adrive-session')) return;
 	const { POST } = await import('../../../routes/api/auth/session/+server.js');
+
 	const response = await call(
 		POST,
 		ctx.event({
@@ -25,6 +34,7 @@ export const login = async (ctx: RouteTestContext) => {
 			headers: { 'content-type': 'application/json' }
 		})
 	);
+
 	if (response.status !== 200) {
 		throw new Error(`Login failed: ${response.status}`);
 	}
@@ -35,7 +45,9 @@ export const listFiles = async (
 ): Promise<FileListResponse> => {
 	const { GET } = await import('../../../routes/api/files/+server.js');
 	const response = await call(GET, ctx.event({ path: '/api/files' }));
+
 	if (!response.ok) throw new Error(`List failed: ${response.status}`);
+
 	return await Schema.decodeUnknownPromise(FileListResponseSchema)(
 		await response.json()
 	);
@@ -53,41 +65,49 @@ export const uploadFile = async (
 ) => {
 	const content = input.content ?? `contents of ${input.name}`;
 	const { PUT } = await import('../../../routes/api/files/+server.js');
+
+	const headers = new Headers({
+		'content-type': input.contentType ?? 'text/plain',
+		'x-adrive-file-name': encodeURIComponent(input.name),
+		'x-adrive-public': String(input.isPublic ?? true)
+	});
+
+	if (input.tags && input.tags.length > 0)
+		headers.set(
+			'x-adrive-tags',
+			encodeURIComponent(JSON.stringify(input.tags))
+		);
+
 	const response = await call(
 		PUT,
 		ctx.event({
 			method: 'PUT',
 			path: '/api/files',
 			body: content,
-			headers: {
-				'content-type': input.contentType ?? 'text/plain',
-				'x-adrive-file-name': encodeURIComponent(input.name),
-				'x-adrive-public': String(input.isPublic ?? true),
-				...(input.tags && input.tags.length > 0
-					? {
-							'x-adrive-tags': encodeURIComponent(JSON.stringify(input.tags))
-						}
-					: {})
-			}
+			headers: Object.fromEntries(headers)
 		})
 	);
+
 	if (response.status !== 201) {
 		throw new Error(
 			`Upload failed: ${response.status} ${await response.text()}`
 		);
 	}
-	const body = (await response.json()) as {
-		file: { id: string; version: number };
-	};
+
+	const body = Schema.decodeUnknownSync(UploadResponseSchema)(
+		await response.json()
+	);
+
 	return body.file;
 };
 
 export const mutateFile = async (
 	ctx: RouteTestContext,
 	id: string,
-	mutation: Record<string, unknown>
+	mutation: FileMutation
 ) => {
 	const { PATCH } = await import('../../../routes/api/files/[id]/+server.js');
+
 	const response = await call(
 		PATCH,
 		ctx.event({
@@ -98,12 +118,16 @@ export const mutateFile = async (
 			params: { id }
 		})
 	);
+
 	if (!response.ok) {
 		throw new Error(
 			`Mutation failed: ${response.status} ${await response.text()}`
 		);
 	}
-	return (await response.json()) as { file: { id: string } };
+
+	return Schema.decodeUnknownSync(FileMutationResponseSchema)(
+		await response.json()
+	);
 };
 
 export const indexFile = async (ctx: RouteTestContext, fileId: string) => {

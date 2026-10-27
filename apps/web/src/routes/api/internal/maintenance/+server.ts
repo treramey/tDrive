@@ -11,6 +11,7 @@ export const POST: RequestHandler = ({ request }) =>
 		Effect.gen(function* () {
 			const config = yield* AppConfig;
 			const lifecycle = yield* Lifecycle;
+
 			const authorized = yield* Effect.tryPromise({
 				try: () =>
 					verifyScheduledRequest(
@@ -22,12 +23,15 @@ export const POST: RequestHandler = ({ request }) =>
 				catch: () =>
 					new Unauthorized({ message: 'Scheduled request is unauthorized' })
 			});
+
 			if (!authorized) {
 				return yield* new Unauthorized({
 					message: 'Scheduled request is unauthorized'
 				});
 			}
+
 			yield* lifecycle.run;
+
 			return new Response(null, { status: 204 });
 		})
 	);

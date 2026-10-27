@@ -5,9 +5,11 @@ import type { DashboardFile } from '@tdrive/shared';
 import { createSelection, type Selection } from './selection.svelte';
 
 type SelectionDeps = Parameters<typeof createSelection>[0];
+
 type SelectionToasts = SelectionDeps['toasts'];
 
 export interface SelectionFixtureOptions {
+	readonly api?: SelectionDeps['api'];
 	readonly files?: ReadonlyArray<DashboardFile>;
 	readonly visible?: ReadonlyArray<DashboardFile>;
 	readonly view?: boolean | (() => boolean);
@@ -21,18 +23,27 @@ export interface SelectionFixture {
 
 export const setupSelection = (
 	toasts: SelectionToasts,
-	refetch: () => Promise<unknown>,
+	refetch: () => Promise<void>,
 	options?: SelectionFixtureOptions
 ): SelectionFixture => {
 	// Reactive view holder so tests can flip views through a signal rather
 	// than a plain closure (the reset effect must observe a change).
 	let dynamicView = $state<boolean | null>(null);
 	const viewAccessor = options?.view;
+
 	const view: () => boolean = () => {
-		if (typeof viewAccessor === 'function') return viewAccessor();
+		if (
+			viewAccessor !== undefined &&
+			viewAccessor !== true &&
+			viewAccessor !== false
+		)
+			return viewAccessor();
+
 		return dynamicView ?? viewAccessor ?? false;
 	};
+
 	let selection!: Selection;
+
 	const dispose = $effect.root(() => {
 		selection = createSelection({
 			session: { token: 'secret-token' },
@@ -40,10 +51,13 @@ export const setupSelection = (
 			files: () => options?.files ?? [],
 			visible: () => options?.visible ?? options?.files ?? [],
 			view,
-			refetch
+			refetch,
+			api: options?.api
 		});
 	});
+
 	flushSync();
+
 	return {
 		selection,
 		dispose,

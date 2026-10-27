@@ -84,6 +84,7 @@ export const withScheduledLifecycle = (options) => {
 
 			const assetsIgnore = `${directory}/.assetsignore`;
 			const current = readFileSync(assetsIgnore, 'utf8');
+
 			if (!current.includes(generatedName)) {
 				appendFileSync(assetsIgnore, `\n${generatedName}\n`);
 			}

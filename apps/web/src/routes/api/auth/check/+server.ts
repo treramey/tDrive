@@ -8,6 +8,7 @@ export const GET: RequestHandler = ({ cookies, request, url }) =>
 		Effect.gen(function* () {
 			const auth = yield* Auth;
 			yield* authorizeRequest(auth, request, url, cookies);
+
 			return Response.json({ ok: true as const });
 		})
 	);

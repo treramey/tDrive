@@ -2,11 +2,11 @@ import { sitePathCandidates } from '@tdrive/shared';
 import { Effect } from 'effect';
 import { InvalidRequest, NotFound } from '../../errors';
 import type { SiteInternals } from './internals';
-import { SiteAssetRow, type SitesShape } from './types';
+import { SiteAssetRow, type SitesService } from './types';
 
 export const readOps = (
 	internals: SiteInternals
-): Pick<SitesShape, 'findAsset'> => {
+): Pick<SitesService, 'findAsset'> => {
 	const { all, db } = internals;
 
 	return {
@@ -26,6 +26,7 @@ export const readOps = (
 						message: 'Site asset path is unsafe'
 					})
 			});
+
 			const rows = yield* all(
 				db
 					.prepare(
@@ -56,12 +57,17 @@ export const readOps = (
 				SiteAssetRow,
 				'find site asset'
 			);
+
 			const byPath = new Map(rows.map((row) => [row.path, row]));
+
 			const asset = candidates.flatMap((path) => {
 				const value = byPath.get(path);
+
 				return value ? [value] : [];
 			})[0];
+
 			if (!asset) return yield* new NotFound({ id: fileId });
+
 			return {
 				path: asset.path,
 				r2Key: asset.r2_key,

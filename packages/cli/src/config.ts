@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { Effect, Schema } from 'effect';
+import { Effect, Schema, Option } from 'effect';
 import { CliConfigSchema, type CliConfig } from './config-schema.ts';
 import { CliFailure } from './errors.ts';
 import { assertSecureUrl } from './url-trust.ts';
@@ -11,6 +11,7 @@ export const configPath = () => {
 	const root = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
 	const current = join(root, 'tdrive', 'config.json');
 	const legacy = join(root, 'adrive', 'config.json');
+
 	// Reuse existing credentials after the rename; new installs use tdrive.
 	return !existsSync(current) && existsSync(legacy) ? legacy : current;
 };
@@ -40,22 +41,24 @@ export const discoverContentOrigin = async (
 	const response = await fetch(`${endpoint}/api/files`, {
 		headers: { authorization: `Bearer ${apiKey}` }
 	});
+
 	if (!response.ok) return undefined;
-	const body: unknown = await response.json();
-	if (
-		typeof body === 'object' &&
-		body !== null &&
-		'contentOrigin' in body &&
-		typeof body.contentOrigin === 'string'
-	) {
-		const origin = new URL(body.contentOrigin);
+
+	const body = Schema.decodeUnknownOption(
+		Schema.Struct({ contentOrigin: Schema.String })
+	)(await response.json());
+
+	if (Option.isSome(body)) {
+		const origin = new URL(body.value.contentOrigin);
 		assertSecureUrl(
 			origin,
 			allowHttp,
 			'The content origin advertised by the server'
 		);
+
 		return origin.origin;
 	}
+
 	return undefined;
 };
 
@@ -71,6 +74,7 @@ export const withContentOrigin = (config: CliConfig) =>
 						config.apiKey,
 						config.allowHttp === true
 					);
+
 					return discovered !== undefined
 						? { ...config, contentOrigin: discovered }
 						: config;
@@ -122,6 +126,7 @@ export const loadConfig = Effect.tryPromise({
 					config.allowHttp === true,
 					'The configured server URL'
 				);
+
 				return config;
 			},
 			catch: (cause) =>

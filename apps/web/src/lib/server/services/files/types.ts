@@ -1,5 +1,6 @@
+import { decodeRows } from '../../decode-rows';
 import type { DashboardFile, FileDetail, FileSummary } from '@tdrive/shared';
-import { Schema } from 'effect';
+import { Schema, Data } from 'effect';
 import type { Effect } from 'effect';
 import type { StoredBlob } from '../blobs';
 import { InvalidRequest, NotFound, StorageError } from '../../errors';
@@ -61,12 +62,15 @@ export type DashboardThumbnailStoreResult =
 	| { readonly _tag: 'Stored'; readonly blob: StoredBlob }
 	| { readonly _tag: 'Existing'; readonly r2Key: string };
 
+export const DashboardThumbnailStoreResult =
+	Data.taggedEnum<DashboardThumbnailStoreResult>();
+
 export interface MutationResult {
 	readonly file: DashboardFile;
 	readonly forcedPublic: boolean;
 }
 
-export interface FilesShape {
+export interface FilesService {
 	readonly upload: (
 		input: UploadInput
 	) => Effect.Effect<UploadResult, InvalidRequest | StorageError>;
@@ -136,19 +140,9 @@ export interface FilesShape {
 	) => Effect.Effect<FileContent, InvalidRequest | NotFound | StorageError>;
 }
 
-export const decodeVersionRows = (rows: unknown) => {
-	const decoded = Schema.decodeUnknownOption(Schema.Array(FileVersionRow))(
-		rows
-	);
-	return decoded._tag === 'Some' ? decoded.value : [];
-};
+export const decodeVersionRows = decodeRows(FileVersionRow);
 
-export const decodeContentRows = (rows: unknown) => {
-	const decoded = Schema.decodeUnknownOption(Schema.Array(FileContentRow))(
-		rows
-	);
-	return decoded._tag === 'Some' ? decoded.value : [];
-};
+export const decodeContentRows = decodeRows(FileContentRow);
 
 export const toVersion = (row: typeof FileVersionRow.Type) => ({
 	version: row.version,

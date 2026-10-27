@@ -8,6 +8,7 @@ export const validateRangeHeader = (value: string | null) => {
 			message: 'Byte range is invalid'
 		});
 	}
+
 	return value;
 };
 
@@ -33,21 +34,18 @@ export const rangeHeaders = (
 		contentLength: object.size,
 		contentRange: undefined
 	});
+
 	if (requestedRange === null) return fullResponse();
 	const range = object.range;
+
 	if (!range) return fullResponse();
-	const suffix =
-		'suffix' in range && typeof range.suffix === 'number'
-			? range.suffix
-			: undefined;
-	const returnedOffset =
-		'offset' in range && typeof range.offset === 'number'
-			? range.offset
-			: undefined;
-	const returnedLength =
-		'length' in range && typeof range.length === 'number'
-			? range.length
-			: undefined;
+
+	const suffix = 'suffix' in range ? range.suffix : undefined;
+
+	const returnedOffset = 'offset' in range ? range.offset : undefined;
+
+	const returnedLength = 'length' in range ? range.length : undefined;
+
 	if (
 		suffix === undefined &&
 		returnedOffset === undefined &&
@@ -55,15 +53,19 @@ export const rangeHeaders = (
 	) {
 		return fullResponse();
 	}
+
 	const offset =
 		suffix !== undefined
 			? Math.max(0, totalSize - suffix)
 			: (returnedOffset ?? 0);
+
 	const length =
 		suffix !== undefined
 			? Math.min(totalSize, suffix)
 			: (returnedLength ?? totalSize - offset);
+
 	if (totalSize === 0 && offset === 0 && length === 0) return fullResponse();
+
 	if (
 		!Number.isSafeInteger(offset) ||
 		!Number.isSafeInteger(length) ||
@@ -73,6 +75,7 @@ export const rangeHeaders = (
 	) {
 		return null;
 	}
+
 	return {
 		status: 206,
 		contentLength: length,

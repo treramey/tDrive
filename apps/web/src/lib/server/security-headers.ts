@@ -29,11 +29,14 @@ const dashboardCsp = (contentOrigin: string, scriptSrc: string) =>
 
 const extractScriptSrc = (existingCsp: string | null) => {
 	const fallback = `script-src 'self'`;
+
 	if (!existingCsp) return fallback;
+
 	const directive = existingCsp
 		.split(';')
 		.map((part) => part.trim())
 		.find((part) => part.startsWith('script-src '));
+
 	return directive ?? fallback;
 };
 
@@ -48,12 +51,15 @@ export const applySecurityHeaders = (
 	if (context.requestOrigin.startsWith('https://')) {
 		headers.set('Strict-Transport-Security', HSTS_VALUE);
 	}
+
 	if (!headers.has('X-Content-Type-Options')) {
 		headers.set('X-Content-Type-Options', 'nosniff');
 	}
+
 	if (!headers.has('Referrer-Policy')) {
 		headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 	}
+
 	if (!headers.has('Permissions-Policy')) {
 		headers.set(
 			'Permissions-Policy',

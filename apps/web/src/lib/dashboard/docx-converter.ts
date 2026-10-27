@@ -7,6 +7,7 @@ export const convertDocx = async (
 	try {
 		if (bytes.byteLength > maxDocxPreviewBytes) return { kind: 'error' };
 		const mammoth = await import('mammoth');
+
 		const result = await mammoth.convertToHtml(
 			{ arrayBuffer: bytes },
 			{
@@ -15,11 +16,13 @@ export const convertDocx = async (
 				convertImage: mammoth.images.imgElement(async () => ({ src: '' }))
 			}
 		);
+
 		if (
 			new TextEncoder().encode(result.value).byteLength > maxDocxOutputBytes
 		) {
 			return { kind: 'error' };
 		}
+
 		return {
 			kind: 'converted',
 			html: result.value,

@@ -17,8 +17,10 @@
 	const runAction = async (item: ToastItem) => {
 		if (!item.action || running.includes(item.id)) return;
 		running = [...running, item.id];
+
 		try {
 			await item.action.run();
+
 			if (!destroyed) toasts.remove(item.id);
 		} catch (cause) {
 			if (!destroyed) toasts.error(cause, `${item.action.label} failed`);

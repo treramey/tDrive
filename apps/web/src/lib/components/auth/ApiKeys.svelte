@@ -10,14 +10,17 @@
 
 	let { token }: { token: string } = $props();
 	const toasts = getToasts();
+
 	const keys = resource(
 		() => token,
 		async (value, _previous, { signal }) => {
 			const result = await listApiKeys(value, signal);
 			signal.throwIfAborted();
+
 			return result;
 		}
 	);
+
 	let name = $state('');
 	let scope = $state<'read-only' | 'read-write'>('read-write');
 	let created = $state('');
@@ -28,6 +31,7 @@
 	const create = async () => {
 		if (!name.trim() || busy) return;
 		busy = true;
+
 		try {
 			const result = await createApiKey(token, name, scope);
 			created = result.token;
@@ -43,8 +47,10 @@
 
 	const revoke = async () => {
 		const target = revoking;
+
 		if (!target || busy) return;
 		busy = true;
+
 		try {
 			await revokeApiKey(token, target.id);
 			keys.mutate(

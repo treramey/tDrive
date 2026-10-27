@@ -12,11 +12,11 @@ export interface LifecycleSummary {
 	readonly vectors: number;
 }
 
-export interface LifecycleShape {
+export interface LifecycleService {
 	readonly run: Effect.Effect<LifecycleSummary>;
 }
 
-export class Lifecycle extends Context.Service<Lifecycle, LifecycleShape>()(
+export class Lifecycle extends Context.Service<Lifecycle, LifecycleService>()(
 	'app/Lifecycle'
 ) {}
 
@@ -43,6 +43,7 @@ const recover = <A>(
 						cause: String(cause)
 					})
 				);
+
 				return fallback;
 			})
 		)
@@ -55,10 +56,12 @@ export const runLifecycleTasks = (tasks: LifecycleTasks) =>
 			tasks.authentication,
 			0
 		);
+
 		const sites = yield* recover('sites', tasks.sites, 0);
 		const indexing = yield* recover('indexing', tasks.indexing, 0);
 		const files = yield* recover('files', tasks.files, 0);
 		const vectors = yield* recover('vectors', tasks.vectors, 0);
+
 		return { authentication, sites, indexing, files, vectors };
 	});
 
@@ -82,6 +85,7 @@ const makeLifecycle = Effect.gen(function* () {
 								cause: String(cause)
 							})
 						);
+
 						return 0;
 					})
 				)

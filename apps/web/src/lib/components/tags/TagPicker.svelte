@@ -25,20 +25,26 @@
 	let query = $state('');
 	let expanded = $state(false);
 	let activeIndex = $state(-1);
+
 	const matches = $derived(
 		tags.filter((tag) => tag.name.toLowerCase().includes(query.toLowerCase()))
 	);
+
 	const createName = $derived(query.trim());
+
 	const canCreate = $derived(
 		Boolean(createName && matches.length === 0 && oncreate)
 	);
+
 	const optionCount = $derived(matches.length + (canCreate ? 1 : 0));
 	const optionId = (index: number) => `${listboxId}-option-${index}`;
+
 	const activeOptionId = $derived(
 		expanded && activeIndex >= 0 && activeIndex < optionCount
 			? optionId(activeIndex)
 			: undefined
 	);
+
 	const resultMessage = $derived(
 		expanded
 			? canCreate
@@ -49,6 +55,7 @@
 
 	const openList = () => {
 		expanded = true;
+
 		if (activeIndex < 0 || activeIndex >= optionCount) {
 			activeIndex = optionCount > 0 ? 0 : -1;
 		}
@@ -56,19 +63,25 @@
 
 	const moveActive = (step: 1 | -1) => {
 		expanded = true;
+
 		if (optionCount === 0) {
 			activeIndex = -1;
+
 			return;
 		}
+
 		if (activeIndex < 0 || activeIndex >= optionCount) {
 			activeIndex = step === 1 ? 0 : optionCount - 1;
+
 			return;
 		}
+
 		activeIndex = (activeIndex + step + optionCount) % optionCount;
 	};
 
 	const toggle = async (tag: Tag) => {
 		if (busy) return;
+
 		try {
 			await ontoggle(tag);
 		} catch {
@@ -78,7 +91,9 @@
 
 	const create = async () => {
 		const name = createName;
+
 		if (busy || !name || !oncreate) return;
+
 		try {
 			await oncreate(name);
 			query = '';

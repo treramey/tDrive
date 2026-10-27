@@ -1,3 +1,4 @@
+import { Predicate } from 'effect';
 import { createServer, type Server } from 'node:http';
 import {
 	mkdir,
@@ -55,8 +56,10 @@ beforeAll(async () => {
 		if (request.url?.startsWith('/f/leaky')) {
 			response.statusCode = 500;
 			response.end('boom');
+
 			return;
 		}
+
 		if (
 			request.method === 'GET' &&
 			request.url?.startsWith(`/f/${file.id}?v=1&e=`)
@@ -68,8 +71,10 @@ beforeAll(async () => {
 				`attachment; filename="${file.displayName}"`
 			);
 			response.end(downloaded);
+
 			return;
 		}
+
 		response.statusCode = 404;
 		response.end();
 	});
@@ -77,9 +82,11 @@ beforeAll(async () => {
 		contentServer.listen(0, '127.0.0.1', resolve)
 	);
 	const contentAddress = contentServer.address();
-	if (contentAddress === null || typeof contentAddress === 'string') {
+
+	if (contentAddress === null || Predicate.isString(contentAddress)) {
 		throw new Error('Content test server did not bind a TCP port');
 	}
+
 	contentEndpoint = `http://127.0.0.1:${contentAddress.port}`;
 
 	dashboardServer = createServer((request, response) => {
@@ -98,31 +105,43 @@ beforeAll(async () => {
 					interval: 0
 				})
 			);
+
 			return;
 		}
+
 		if (request.method === 'POST' && request.url === '/api/auth/device/token') {
 			devicePolls += 1;
 			response.setHeader('Content-Type', 'application/json');
+
 			if (devicePolls === 1) {
 				response.statusCode = 202;
 				response.end(JSON.stringify({ status: 'authorization_pending' }));
+
 				return;
 			}
+
 			if (devicePolls === 2) {
 				response.statusCode = 429;
 				response.end(JSON.stringify({ status: 'slow_down' }));
+
 				return;
 			}
+
 			response.end(JSON.stringify({ apiKey: deviceApiKey }));
+
 			return;
 		}
+
 		if (request.method === 'PUT' && request.url === '/api/files') {
 			uploadedContentLength = request.headers['content-length'];
+
 			if (uploadedContentLength === undefined) {
 				response.statusCode = 411;
 				response.end('Content-Length is required');
+
 				return;
 			}
+
 			const chunks: Array<Buffer> = [];
 			request.on('data', (chunk: Buffer) => chunks.push(chunk));
 			request.on('end', () => {
@@ -136,8 +155,10 @@ beforeAll(async () => {
 					})
 				);
 			});
+
 			return;
 		}
+
 		if (request.method === 'GET' && request.url === '/api/files') {
 			response.setHeader('Content-Type', 'application/json');
 			response.end(
@@ -164,8 +185,10 @@ beforeAll(async () => {
 					}
 				})
 			);
+
 			return;
 		}
+
 		if (
 			request.method === 'GET' &&
 			request.url === `/api/files/${file.id}/link`
@@ -182,27 +205,34 @@ beforeAll(async () => {
 					public: false
 				})
 			);
+
 			return;
 		}
+
 		if (
 			request.method === 'GET' &&
 			request.url === `/api/files/${file.id}/content`
 		) {
 			response.statusCode = 500;
 			response.end('CLI must not use the redirect endpoint');
+
 			return;
 		}
+
 		if (request.method === 'GET' && request.url === '/api/tags') {
 			response.setHeader('Content-Type', 'application/json');
 			response.end(JSON.stringify({ tags: [] }));
+
 			return;
 		}
+
 		if (request.method === 'POST' && request.url === '/api/tags') {
 			// A 400 carrying a server {message} — the CLI must surface it.
 			// Mirror SvelteKit's content negotiation: without an explicit
 			// application/json accept header the error arrives as an HTML
 			// page, which is exactly the bug that hid these messages.
 			response.statusCode = 400;
+
 			if (request.headers.accept?.includes('application/json')) {
 				response.setHeader('Content-Type', 'application/json');
 				response.end(
@@ -214,10 +244,13 @@ beforeAll(async () => {
 					'<!doctype html><html><head><title>Tag color must be a six-digit hex color</title></head><body>400</body></html>'
 				);
 			}
+
 			return;
 		}
+
 		if (request.method === 'GET' && request.url === '/api/auth/check') {
 			authChecks += 1;
+
 			if (request.headers.authorization?.startsWith('Bearer adr_')) {
 				response.setHeader('Content-Type', 'application/json');
 				response.end(JSON.stringify({ ok: true }));
@@ -228,14 +261,18 @@ beforeAll(async () => {
 					JSON.stringify({ message: 'A valid credential is required' })
 				);
 			}
+
 			return;
 		}
+
 		if (request.method === 'PUT' && request.url === '/api/files/boom/tags') {
 			// A 500 with a non-JSON body — the CLI falls back to a status hint.
 			response.statusCode = 500;
 			response.end('internal boom');
+
 			return;
 		}
+
 		response.statusCode = 404;
 		response.end();
 	});
@@ -243,9 +280,11 @@ beforeAll(async () => {
 		dashboardServer.listen(0, '127.0.0.1', resolve)
 	);
 	const address = dashboardServer.address();
-	if (address === null || typeof address === 'string') {
+
+	if (address === null || Predicate.isString(address)) {
 		throw new Error('Test server did not bind a TCP port');
 	}
+
 	endpoint = `http://127.0.0.1:${address.port}`;
 	configHome = await mkdtemp(join(tmpdir(), 'tdrive-cli-test-'));
 	const path = join(configHome, 'tdrive', 'config.json');
@@ -275,6 +314,7 @@ afterAll(async () => {
 // bundle-only breakage (CJS interop, tree-shaking, define wiring) is
 // caught by the same contract tests.
 const bundlePath = process.env.TDRIVE_TEST_BUNDLE;
+
 const entrypoint = bundlePath
 	? [bundlePath]
 	: ['--experimental-strip-types', join(import.meta.dirname, 'main.ts')];
@@ -288,6 +328,7 @@ const run = (args: ReadonlyArray<string>, input?: Buffer) =>
 		const child = spawn(process.execPath, [...entrypoint, ...args], {
 			env: { ...process.env, XDG_CONFIG_HOME: configHome }
 		});
+
 		const stdout: Array<Buffer> = [];
 		const stderr: Array<Buffer> = [];
 		child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
@@ -309,6 +350,7 @@ describe('CLI stream and JSON contracts', () => {
 		const legacy = join(configHome, 'adrive', 'config.json');
 		await mkdir(dirname(legacy), { recursive: true });
 		await rename(current, legacy);
+
 		try {
 			const result = await run(['--json', 'whoami']);
 			expect(result.status).toBe(0);
@@ -325,6 +367,7 @@ describe('CLI stream and JSON contracts', () => {
 		const legacy = join(configHome, 'adrive', 'config.json');
 		await mkdir(dirname(legacy), { recursive: true });
 		await writeFile(legacy, 'invalid JSON', { mode: 0o600 });
+
 		try {
 			const result = await run(['--json', 'whoami']);
 			expect(result.status).toBe(0);
@@ -339,10 +382,12 @@ describe('CLI stream and JSON contracts', () => {
 
 	it('spools binary stdin, uploads it, and emits only one JSON result', async () => {
 		const payload = Buffer.from([0, 1, 2, 255, 128, 64]);
+
 		const result = await run(
 			['--json', 'put', '-', '--name', 'payload.bin'],
 			payload
 		);
+
 		expect(result.status).toBe(0);
 		expect(result.stderr.toString()).toBe('');
 		expect(uploaded).toEqual(payload);
@@ -405,6 +450,7 @@ describe('CLI stream and JSON contracts', () => {
 			'--color',
 			'blue'
 		]);
+
 		expect(result.status).not.toBe(0);
 		const parsed = JSON.parse(result.stdout.toString().trim());
 		expect(parsed).toMatchObject({
@@ -415,6 +461,7 @@ describe('CLI stream and JSON contracts', () => {
 
 	it('never prints a signed download grant in error detail', async () => {
 		linkUrlOverride = `${contentEndpoint}/f/leaky?v=1&e=1785154500&g=SECRETGRANT`;
+
 		try {
 			const result = await run(['get', file.id, '--output', '/tmp/tdrive-x']);
 			expect(result.status).not.toBe(0);
@@ -468,6 +515,7 @@ describe('CLI stream and JSON contracts', () => {
 			JSON.stringify({ endpoint, apiKey: 'not-a-credential' }),
 			{ mode: 0o600 }
 		);
+
 		try {
 			authChecks = 0;
 			const result = await run(['whoami']);
@@ -518,9 +566,11 @@ describe('CLI stream and JSON contracts', () => {
 			`Logged in to ${endpoint}`
 		]);
 		expect(devicePolls).toBe(3);
+
 		const saved = JSON.parse(
 			await readFile(join(configHome, 'tdrive', 'config.json'), 'utf8')
 		);
+
 		expect(saved).toEqual({
 			endpoint,
 			apiKey: deviceApiKey,
@@ -549,9 +599,11 @@ describe('CLI stream and JSON contracts', () => {
 			{ status: 'authenticated', endpoint }
 		]);
 		expect(devicePolls).toBe(3);
+
 		const saved = JSON.parse(
 			await readFile(join(configHome, 'tdrive', 'config.json'), 'utf8')
 		);
+
 		expect(saved).toEqual({
 			endpoint,
 			apiKey: deviceApiKey,
@@ -561,6 +613,7 @@ describe('CLI stream and JSON contracts', () => {
 
 	it('rejects a download link on an origin the config does not trust', async () => {
 		linkUrlOverride = 'https://evil.example.com/f/steal';
+
 		try {
 			const result = await run(['get', file.id, '--output', '-']);
 			expect(result.status).not.toBe(0);

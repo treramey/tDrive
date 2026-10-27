@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { runEdge, runEdgeWithEvent, runWorkerProgram } from '$lib/server/edge';
 import { AppConfig } from '$lib/server/config';
 import { validateExpiration } from '$lib/server/auth-policy';
@@ -23,6 +23,7 @@ const decodeName = (value: string | null) => {
 			message: 'X-Adrive-File-Name is required'
 		});
 	}
+
 	try {
 		return decodeURIComponent(value);
 	} catch {
@@ -35,6 +36,7 @@ const decodeName = (value: string | null) => {
 
 const parsePublic = (value: string | null) => {
 	if (value === null || value === 'true') return true;
+
 	if (value === 'false') return false;
 	throw new InvalidRequest({
 		status: 400,
@@ -44,21 +46,18 @@ const parsePublic = (value: string | null) => {
 
 const parseTags = (value: string | null) => {
 	if (value === null || value === '') return [];
+
 	if (value.length > 32768) {
 		throw new InvalidRequest({
 			status: 400,
 			message: 'X-Adrive-Tags is too large'
 		});
 	}
+
 	try {
-		const parsed: unknown = JSON.parse(decodeURIComponent(value));
-		if (
-			!Array.isArray(parsed) ||
-			!parsed.every((tag): tag is string => typeof tag === 'string')
-		) {
-			throw new Error('Tags must be strings');
-		}
-		return parsed;
+		return Schema.decodeUnknownSync(Schema.Array(Schema.String))(
+			JSON.parse(decodeURIComponent(value))
+		);
 	} catch {
 		throw new InvalidRequest({
 			status: 400,
@@ -77,6 +76,7 @@ export const GET: RequestHandler = ({ cookies, request, url }) =>
 			const config = yield* AppConfig;
 			yield* authorizeRequest(auth, request, url, cookies);
 			const trashed = url.searchParams.get('trashed') === 'true';
+
 			const page = {
 				cursor: url.searchParams.get('cursor'),
 				limit: yield* Effect.try({
@@ -90,7 +90,9 @@ export const GET: RequestHandler = ({ cookies, request, url }) =>
 								})
 				})
 			};
+
 			const omitMeta = url.searchParams.get('omitMeta') === '1';
+
 			// The three dashboard reads (files, tags, indexing status) are
 			// independent D1 queries; run them concurrently so the listing
 			// latency is the slowest query, not their sum. Pagination with
@@ -101,6 +103,7 @@ export const GET: RequestHandler = ({ cookies, request, url }) =>
 						[files.list(trashed, page), tags.list, indexing.status],
 						{ concurrency: 'unbounded' }
 					);
+
 			return Response.json({
 				files: listing.files,
 				nextCursor: listing.nextCursor,
@@ -120,6 +123,7 @@ export const GET: RequestHandler = ({ cookies, request, url }) =>
 
 export const PUT: RequestHandler = async (event) => {
 	const { cookies, request, url } = event;
+
 	const output = await runEdgeWithEvent(
 		event,
 		Effect.gen(function* () {
@@ -127,16 +131,19 @@ export const PUT: RequestHandler = async (event) => {
 			const authGuard = yield* AuthGuard;
 			const files = yield* Files;
 			const config = yield* AppConfig;
+
 			const credential = yield* authorizeWriteRequest(
 				auth,
 				request,
 				url,
 				cookies
 			);
+
 			const rateLimit = yield* authGuard.consume(
 				'upload',
 				credential.credentialId
 			);
+
 			if (!rateLimit.allowed) {
 				return {
 					fileId: null,
@@ -146,6 +153,7 @@ export const PUT: RequestHandler = async (event) => {
 					)
 				};
 			}
+
 			const displayName = yield* Effect.try({
 				try: () => decodeName(request.headers.get('x-adrive-file-name')),
 				catch: (cause) =>
@@ -156,6 +164,7 @@ export const PUT: RequestHandler = async (event) => {
 								message: 'File name is invalid'
 							})
 			});
+
 			const isPublic = yield* Effect.try({
 				try: () => parsePublic(request.headers.get('x-adrive-public')),
 				catch: (cause) =>
@@ -166,6 +175,7 @@ export const PUT: RequestHandler = async (event) => {
 								message: 'Visibility is invalid'
 							})
 			});
+
 			const result = yield* files.upload({
 				displayName,
 				contentType:
@@ -195,6 +205,7 @@ export const PUT: RequestHandler = async (event) => {
 								})
 				})
 			});
+
 			return {
 				fileId: result.file.id,
 				response: Response.json(
@@ -208,7 +219,9 @@ export const PUT: RequestHandler = async (event) => {
 			};
 		})
 	);
+
 	const uploadedFileId = output.fileId;
+
 	if (uploadedFileId !== null && event.platform) {
 		event.platform.ctx.waitUntil(
 			runWorkerProgram(
@@ -220,29 +233,34 @@ export const PUT: RequestHandler = async (event) => {
 			)
 		);
 	}
+
 	return output.response;
 };
 
 export const DELETE: RequestHandler = async (event) => {
 	const { cookies, request, url } = event;
+
 	const output = await runEdgeWithEvent(
 		event,
 		Effect.gen(function* () {
 			const auth = yield* Auth;
 			const files = yield* Files;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
+
 			if (url.searchParams.get('trashed') !== 'true') {
 				return yield* new InvalidRequest({
 					status: 400,
 					message: 'Only trash can be emptied'
 				});
 			}
+
 			return {
 				count: yield* files.scheduleAllPurgesNow,
 				response: Response.json({ ok: true as const })
 			};
 		})
 	);
+
 	if (output.count > 0 && event.platform) {
 		event.platform.ctx.waitUntil(
 			runWorkerProgram(
@@ -254,5 +272,6 @@ export const DELETE: RequestHandler = async (event) => {
 			)
 		);
 	}
+
 	return output.response;
 };

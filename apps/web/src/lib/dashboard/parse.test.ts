@@ -64,13 +64,14 @@ describe('dashboard response parsing', () => {
 			...listResponse,
 			someFutureField: { anything: true }
 		});
+
 		expect(parsed.files[0]?.id).toBe('file-1');
 		expect(parsed.files[0]?.deletedAt).toBeNull();
 		expect(parsed.semantic.dimensions).toBe(384);
 	});
 
 	it('rejects a file list with a missing required field', () => {
-		const { tags, ...missing } = listResponse;
+		const { tags: _tags, ...missing } = listResponse;
 		expect(() => parseFileListResponse(missing)).toThrow(
 			'The server returned unexpected data'
 		);
@@ -111,6 +112,7 @@ describe('dashboard response parsing', () => {
 			maxUploadBytes: 99_614_720,
 			semanticEnabled: false
 		});
+
 		expect(parsed.versions[0]?.version).toBe(2);
 		expect(parsed.availableTags[0]?.name).toBe('reports');
 	});
@@ -153,6 +155,7 @@ describe('dashboard response parsing', () => {
 			url: 'https://files.example/f/file-1',
 			forcedPublic: false
 		});
+
 		expect(uploaded.url).toBe('https://files.example/f/file-1');
 	});
 
@@ -167,6 +170,7 @@ describe('dashboard response parsing', () => {
 			lastUsedAt: null,
 			revokedAt: null
 		};
+
 		expect(parseApiKeyListResponse({ keys: [key] }).keys[0]?.name).toBe('cli');
 		expect(parseApiKeyCreateResponse({ key, token: 'adr_secret' }).token).toBe(
 			'adr_secret'

@@ -21,6 +21,7 @@ describe('file preview policy', () => {
 				' Application/Vnd.Openxmlformats-officedocument.Wordprocessingml.Document; charset=binary'
 			)
 		).toBe('docx');
+
 		for (const type of [
 			'',
 			'application/zip',
@@ -28,6 +29,7 @@ describe('file preview policy', () => {
 		]) {
 			expect(previewKind('FINDINGS.DOCX', type)).toBe('docx');
 		}
+
 		expect(previewKind('findings.docx', 'text/plain')).toBe('text');
 		expect(previewKind('findings.docx', 'application/xml')).toBe('text');
 		expect(previewKind('findings.docx', 'image/png')).toBeNull();

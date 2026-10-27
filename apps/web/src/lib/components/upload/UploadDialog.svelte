@@ -37,17 +37,21 @@
 	let input = $state<HTMLInputElement>();
 	let dialogIdentity = '';
 	let wasOpen = false;
+
 	const attachInput: Attachment<HTMLInputElement> = (node) => {
 		input = node;
+
 		return () => {
 			if (input === node) input = undefined;
 		};
 	};
+
 	const hasHtml = $derived(
 		selected.some(
 			(file) => file.size <= maxUploadBytes && isHtmlFile(file.name, file.type)
 		)
 	);
+
 	const effectivePublic = $derived(hasHtml || isPublic);
 
 	const reset = () => {
@@ -57,15 +61,18 @@
 		selectedTags = [];
 		expiresAt = '';
 		folderError = '';
+
 		if (input) input.value = '';
 	};
 
 	$effect(() => {
 		const nextIdentity = token;
 		const nextOpen = open;
+
 		if (dialogIdentity !== nextIdentity || (wasOpen && !nextOpen)) {
 			reset();
 		}
+
 		dialogIdentity = nextIdentity;
 		wasOpen = nextOpen;
 	});
@@ -80,17 +87,22 @@
 
 	const chooseDrop = (transfer: DataTransfer | null) => {
 		if (!transfer) return;
+
 		const hasFolder = Array.from(transfer.items).some(
 			(item) => item.kind === 'file' && item.webkitGetAsEntry()?.isDirectory
 		);
+
 		if (hasFolder) {
 			selected = [];
 			rejected = [];
+
 			if (input) input.value = '';
 			folderError =
 				'Folders are not uploaded as files. Use `tdrive site put` for a site directory.';
+
 			return;
 		}
+
 		choose(transfer.files);
 	};
 
@@ -99,6 +111,7 @@
 		const result = partitionUploadFiles(selected, maxUploadBytes);
 		selected = result.accepted;
 		rejected = [...rejected, ...result.rejected];
+
 		if (result.accepted.length === 0) return;
 
 		uploads.enqueue(result.accepted, {

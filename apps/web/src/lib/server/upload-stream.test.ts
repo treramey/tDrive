@@ -21,13 +21,13 @@ const source = (bytes: Uint8Array) =>
 describe('upload streaming', () => {
 	it('requires and validates Content-Length before a body is consumed', () => {
 		expect(() => validateUploadLength(null, 100)).toThrow(
-			expect.objectContaining({ _tag: 'InvalidRequest', status: 411 })
+			expect.objectContaining({ name: 'InvalidRequest', status: 411 })
 		);
 		expect(() => validateUploadLength('not-a-number', 100)).toThrow(
-			expect.objectContaining({ _tag: 'InvalidRequest', status: 400 })
+			expect.objectContaining({ name: 'InvalidRequest', status: 400 })
 		);
 		expect(() => validateUploadLength('101', 100)).toThrow(
-			expect.objectContaining({ _tag: 'InvalidRequest', status: 413 })
+			expect.objectContaining({ name: 'InvalidRequest', status: 413 })
 		);
 		expect(validateUploadLength('0', 100)).toBe(0);
 	});
@@ -35,18 +35,23 @@ describe('upload streaming', () => {
 	it('starts the R2 reader concurrently with the pump', async () => {
 		let putStarted = false;
 		let stored = 0;
+
 		const bucket = {
 			async put(_key, value) {
 				if (!(value instanceof ReadableStream)) {
 					throw new Error('Expected a streamed upload');
 				}
+
 				putStarted = true;
 				const reader = value.getReader();
+
 				while (true) {
 					const next = await reader.read();
+
 					if (next.done) break;
 					stored += next.value.byteLength;
 				}
+
 				return { size: stored, httpEtag: '"etag"' };
 			}
 		} satisfies UploadBucket;
@@ -70,6 +75,7 @@ describe('upload streaming', () => {
 				if (!(value instanceof ArrayBuffer)) {
 					throw new Error('Expected a buffered local upload');
 				}
+
 				return { size: value.byteLength, httpEtag: '"local"' };
 			}
 		} satisfies UploadBucket;
@@ -91,9 +97,11 @@ describe('upload streaming', () => {
 				if (!(value instanceof ReadableStream)) {
 					throw new Error('Expected a streamed upload');
 				}
+
 				const reader = value.getReader();
 				const first = await reader.read();
 				expect(first.done).toBe(true);
+
 				return { size: 0, httpEtag: '"empty"' };
 			}
 		} satisfies UploadBucket;

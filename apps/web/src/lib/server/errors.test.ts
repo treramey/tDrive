@@ -1,4 +1,4 @@
-import { Effect, Exit } from 'effect';
+import { Effect, Exit, Cause } from 'effect';
 import { describe, expect, it } from 'vitest';
 import { InvalidRequest, validate } from './errors';
 
@@ -14,15 +14,17 @@ describe('validate', () => {
 				throw new InvalidRequest({ status: 400, message: 'bad color' });
 			})
 		);
+
 		expect(Exit.isFailure(exit)).toBe(true);
+
 		if (Exit.isFailure(exit)) {
-			const failure = exit.cause.reasons.find((r) => r._tag === 'Fail');
+			const failure = exit.cause.reasons.find(Cause.isFailReason);
 			expect(failure?._tag).toBe('Fail');
 			const error = failure && 'error' in failure ? failure.error : undefined;
 			expect(error).toBeInstanceOf(InvalidRequest);
-			expect((error as InvalidRequest).message).toBe('bad color');
+			expect(error?.message).toBe('bad color');
 			// No Die reason: the throw must not escape as a 500 defect.
-			expect(exit.cause.reasons.some((r) => r._tag === 'Die')).toBe(false);
+			expect(exit.cause.reasons.some(Cause.isDieReason)).toBe(false);
 		}
 	});
 
@@ -32,12 +34,14 @@ describe('validate', () => {
 				throw new Error('unexpected');
 			})
 		);
+
 		expect(Exit.isFailure(exit)).toBe(true);
+
 		if (Exit.isFailure(exit)) {
-			const failure = exit.cause.reasons.find((r) => r._tag === 'Fail');
+			const failure = exit.cause.reasons.find(Cause.isFailReason);
 			const error = failure && 'error' in failure ? failure.error : undefined;
 			expect(error).toBeInstanceOf(InvalidRequest);
-			expect((error as InvalidRequest).status).toBe(400);
+			expect(error?.status).toBe(400);
 		}
 	});
 });

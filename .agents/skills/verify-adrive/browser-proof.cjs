@@ -160,11 +160,21 @@ async function main() {
 		);
 		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 		assert.equal((await signedOut).status(), 204);
+		await page
+			.getByRole('link', { name: 'Sign in', exact: true })
+			.waitFor();
 		await page.goto('http://localhost:5173');
 		await page
 			.getByRole('heading', { name: 'Sign in to your drive', exact: true })
 			.waitFor();
-		log('Sign out', 'Sign-in page returned');
+		assert.equal(
+			(await context.request.get('http://localhost:5173/api/files')).status(),
+			401
+		);
+		log(
+			'Sign out',
+			'Sign-in page survives reload; authenticated API returns 401'
+		);
 		assert.deepEqual(errors, []);
 	} catch (error) {
 		failure = error;

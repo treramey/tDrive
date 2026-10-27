@@ -20,14 +20,18 @@
 	let open = $state(false);
 	let panel = $state<HTMLElement>();
 	let triggerButton = $state<HTMLButtonElement>();
+
 	const attachPanel: Attachment<HTMLElement> = (node) => {
 		panel = node;
+
 		return () => {
 			if (panel === node) panel = undefined;
 		};
 	};
+
 	const attachTrigger: Attachment<HTMLButtonElement> = (node) => {
 		triggerButton = node;
+
 		return () => {
 			if (triggerButton === node) triggerButton = undefined;
 		};
@@ -42,21 +46,26 @@
 
 	const focusAt = (index: number) => {
 		const options = items();
+
 		if (options.length === 0) return;
 		options[(index + options.length) % options.length]?.focus();
 	};
 
 	const onKeydown = (event: KeyboardEvent) => {
 		const target = event.target;
+
 		const editing =
 			target instanceof Element &&
 			target.matches('input, textarea, select, [contenteditable="true"]');
+
 		if (editing && event.key !== 'Escape' && event.key !== 'Tab') return;
 
 		const options = items();
+
 		const current = options.findIndex(
 			(item) => item === document.activeElement
 		);
+
 		if (event.key === 'ArrowDown') {
 			event.preventDefault();
 			focusAt(current + 1);

@@ -21,12 +21,13 @@
 	let deadline = $state(Date.now() + 10 * 60 * 1_000);
 	let remainingSeconds = $state(10 * 60);
 	const expired = $derived(remainingSeconds <= 0);
+
 	const remainingLabel = $derived(
 		`${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, '0')}`
 	);
 
 	$effect(() => {
-		code;
+		void code;
 		deadline =
 			expiresAt && Number.isFinite(expiresAt)
 				? expiresAt
@@ -43,8 +44,10 @@
 				Math.ceil((deadline - Date.now()) / 1_000)
 			);
 		};
+
 		updateRemaining();
 		const timer = setInterval(updateRemaining, 1_000);
+
 		return () => clearInterval(timer);
 	});
 
@@ -61,8 +64,10 @@
 		const submittedCode = code;
 		const isCurrent = () => token === submittedToken && code === submittedCode;
 		busy = true;
+
 		try {
 			await approveDevice(submittedToken, submittedCode);
+
 			if (!isCurrent()) return;
 			approved = true;
 			clearCode();
@@ -78,14 +83,18 @@
 	const deny = async () => {
 		if (expired) {
 			clearCode();
+
 			return;
 		}
+
 		const submittedToken = token;
 		const submittedCode = code;
 		const isCurrent = () => token === submittedToken && code === submittedCode;
 		busy = true;
+
 		try {
 			await denyDevice(submittedToken, submittedCode);
+
 			if (!isCurrent()) return;
 			toasts.info('Device request denied');
 			clearCode();

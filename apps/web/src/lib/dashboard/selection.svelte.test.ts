@@ -1,7 +1,14 @@
 import type { DashboardFile } from '@tdrive/shared';
 import { flushSync } from 'svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mutateFile } from './api';
+import type {
+	mutateFile as mutateFileOperation,
+	setFileTags as setFileTagsOperation
+} from './api';
+
+const mutateFile = vi.fn<typeof mutateFileOperation>();
+const api = { mutateFile, setFileTags: vi.fn<typeof setFileTagsOperation>() };
+
 import { setupSelection } from './selection.fixture.svelte';
 import type { Toasts } from './toast.svelte';
 
@@ -44,19 +51,16 @@ const setup = (options?: {
 }) => {
 	const toasts = toastsStub();
 	const refetch = vi.fn().mockResolvedValue(undefined);
-	const { selection, dispose, setView } = setupSelection(
-		toasts,
-		refetch,
-		options
-	);
+
+	const { selection, dispose, setView } = setupSelection(toasts, refetch, {
+		...options,
+		api
+	});
+
 	flushSync();
+
 	return { selection, toasts, refetch, dispose, setView };
 };
-
-vi.mock('./api', () => ({
-	mutateFile: vi.fn(),
-	setFileTags: vi.fn()
-}));
 
 beforeEach(() => {
 	vi.mocked(mutateFile).mockReset();

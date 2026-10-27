@@ -44,10 +44,12 @@ describe('semantic indexing policy', () => {
 	it('uses attempt-unique vector ids within Vectorize limits', () => {
 		const id = '550e8400-e29b-41d4-a716-446655440000';
 		const token = newIndexLeaseToken();
+
 		const maxOrdinal = chunkSearchText(
 			'notes.txt',
 			'a'.repeat(searchTextLimit)
 		).at(-1)?.ordinal;
+
 		expect(token).toMatch(/^[A-Za-z0-9_-]{22}$/);
 		expect(maxOrdinal).toBeDefined();
 		const vectorId = vectorIdForChunk(id, token, maxOrdinal ?? 0);

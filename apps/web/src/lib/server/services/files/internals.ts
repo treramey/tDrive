@@ -31,8 +31,10 @@ export interface CoreDeps {
 
 export const createInternals = (deps: CoreDeps) => {
 	const { db, blobs, sql, config, tags } = deps;
+
 	const preparePurgeCommand = (command: PurgeSqlCommand) =>
 		db.prepare(command.sql).bind(...command.bindings);
+
 	const compensateStoredBlob = <OriginalError>(
 		failure: OriginalError,
 		fileId: string,
@@ -51,6 +53,7 @@ export const createInternals = (deps: CoreDeps) => {
 					new Date().toISOString(),
 					String(deleteCause)
 				);
+
 				return Effect.tryPromise({
 					try: () =>
 						db
@@ -98,8 +101,11 @@ export const createInternals = (deps: CoreDeps) => {
 						new StorageError({ operation: 'find dashboard file', cause })
 				)
 			);
+
 		const row = decodeDashboardRows(rows)[0];
+
 		if (!row) return yield* new NotFound({ id });
+
 		return toDashboardFile(row);
 	});
 
@@ -111,11 +117,13 @@ export const createInternals = (deps: CoreDeps) => {
 	) {
 		const version = current.version + 1;
 		const updatedAt = new Date().toISOString();
+
 		const visibility = visibilityForFile(
 			current.displayName,
 			current.htmlForcedPublic ? 'text/html' : contentType,
 			current.public
 		);
+
 		const statements = [
 			db
 				.prepare(
@@ -160,9 +168,11 @@ export const createInternals = (deps: CoreDeps) => {
 				),
 			...fileIndexStatements(db, current.id)
 		];
+
 		yield* Effect.tryPromise({
 			try: async () => {
 				const results = await db.batch(statements);
+
 				if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) {
 					throw new Error('File changed while the version was uploading');
 				}
@@ -170,6 +180,7 @@ export const createInternals = (deps: CoreDeps) => {
 			catch: (cause) =>
 				new StorageError({ operation: 'commit file version', cause })
 		});
+
 		return {
 			file: {
 				...current,

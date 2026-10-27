@@ -34,12 +34,14 @@ const root = Command.make('tdrive', {
 Command.run(root, { version: CLI_VERSION }).pipe(
 	Effect.catchCause((cause) => {
 		const failure = findCliFailure(cause);
+
 		if (failure) {
 			return Effect.sync(() => {
 				renderCliFailure(failure);
 				process.exit(1);
 			});
 		}
+
 		return Effect.failCause(cause);
 	}),
 	Effect.provide([NodeServices.layer, NodeHttpClient.layerNodeHttp]),

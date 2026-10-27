@@ -31,12 +31,15 @@
 	const reload = async () => {
 		if (session.token !== BROWSER_SESSION) {
 			loading = false;
+
 			return;
 		}
+
 		try {
 			passkeys = await listPasskeys(controller.signal);
 		} catch (cause) {
 			if (controller.signal.aborted) return;
+
 			if (cause instanceof ApiError && cause.status === 401) {
 				await session.restoreAfterRevocation();
 			} else
@@ -51,6 +54,7 @@
 		supported = passkeysSupported();
 		void reload();
 	});
+
 	onDestroy(() => controller.abort());
 
 	const add = async () => {
@@ -58,6 +62,7 @@
 		operation = 'adding';
 		error = '';
 		status = '';
+
 		try {
 			await enrollPasskey({ name, passcode }, controller.signal);
 			name = '';
@@ -73,17 +78,21 @@
 
 	const remove = async () => {
 		const target = selected;
+
 		if (!target || operation !== 'idle') return;
 		operation = 'removing';
 		error = '';
 		status = '';
+
 		try {
 			const result = await removePasskey({
 				id: target.id,
 				passcode: removalPasscode
 			});
+
 			selected = null;
 			status = 'Passkey removed.';
+
 			if (result.signedOut) {
 				await session.restoreAfterRevocation();
 				await goto('/');

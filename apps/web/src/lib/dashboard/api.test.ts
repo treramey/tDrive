@@ -1,3 +1,4 @@
+import type { FileContentLinkResponse } from '@tdrive/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getContentLink, getFilePreview } from './api';
 
@@ -8,7 +9,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-const stubLink = (payload: Record<string, unknown>) => {
+const stubLink = (payload: FileContentLinkResponse) => {
 	const json = () => JSON.stringify(payload);
 	vi.stubGlobal(
 		'fetch',
@@ -27,7 +28,9 @@ it('rejects binary previews before decoding and never caches them as text', asyn
 			const response = new Response(new ReadableStream({ cancel }), {
 				headers: { 'X-Adrive-Preview-Kind': 'docx' }
 			});
+
 			response.text = decode;
+
 			return response;
 		})
 	);
@@ -99,6 +102,7 @@ describe('content link memoization', () => {
 		for (let index = 0; index < 201; index += 1) {
 			await getContentLink('token', `id-bound-${index}`, 1);
 		}
+
 		fetchMock.mockClear();
 
 		await getContentLink('token', 'id-bound-0', 1);

@@ -13,6 +13,7 @@ export default async function globalSetup() {
 		'..',
 		'..'
 	);
+
 	rmSync(join(webRoot, '.wrangler', 'test-state'), {
 		recursive: true,
 		force: true

@@ -2,9 +2,17 @@ import { Schema } from 'effect';
 
 const CONFUSABLE_SEPARATORS =
 	/[\u2044\u2215\u2216\u2572\u29f5\u29f8\u29f9\ufe68\uff0f\uff3c]/u;
-const CONTROL_OR_BIDI =
-	/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
+
+const CONTROL_OR_BIDI = /[\p{Cc}\u202a-\u202e\u2066-\u2069]/u;
+
 const WINDOWS_DRIVE = /^[a-zA-Z]:/;
+
+export const hasAsciiControlCharacters = (value: string) =>
+	Array.from(value).some((character) => {
+		const code = character.charCodeAt(0);
+
+		return code < 32 || code === 127;
+	});
 
 export class InvalidSitePath extends Error {
 	readonly name = 'InvalidSitePath';
@@ -26,6 +34,7 @@ export const normalizeSitePath = (value: string) => {
 	}
 
 	const segments = value.split('/');
+
 	if (
 		segments.some(
 			(segment) =>
@@ -43,11 +52,15 @@ export const normalizeSitePath = (value: string) => {
 
 export const sitePathCandidates = (value: string) => {
 	if (value === '') return ['index.html'];
+
 	if (value.endsWith('/')) {
 		const directory = normalizeSitePath(value.slice(0, -1));
+
 		return [`${directory}/index.html`];
 	}
+
 	const exact = normalizeSitePath(value);
+
 	return [exact, `${exact}/index.html`];
 };
 
@@ -392,14 +405,18 @@ export const PasskeySchema = Schema.Struct({
 	backedUp: Schema.Boolean,
 	currentSession: Schema.Boolean
 });
+
 export type Passkey = typeof PasskeySchema.Type;
+
 export const PasskeyListResponseSchema = Schema.Struct({
 	passkeys: Schema.Array(PasskeySchema)
 });
+
 export const PasskeyEnrollSchema = Schema.Struct({
 	name: Schema.String,
 	passcode: Schema.String
 });
+
 export const PasskeyRemovalResponseSchema = Schema.Struct({
 	signedOut: Schema.Boolean
 });

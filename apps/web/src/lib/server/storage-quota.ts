@@ -47,6 +47,7 @@ export const ensureStorageQuota = (
 			catch: (cause) =>
 				new StorageError({ operation: 'measure stored bytes', cause })
 		});
+
 		// Fail closed: an unreadable total must block the upload, not wave
 		// it through as if the bucket were empty.
 		if (row === null || !Number.isFinite(row.total)) {
@@ -55,6 +56,7 @@ export const ensureStorageQuota = (
 				cause: 'Unexpected aggregate result'
 			});
 		}
+
 		if (row.total + incomingBytes > maxTotalBytes) {
 			return yield* new InvalidRequest({
 				status: 413,

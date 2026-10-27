@@ -7,12 +7,12 @@ import {
 } from '../../file-policy';
 import { fileIndexStatements } from '../../search-index';
 import type { FileInternals } from './internals';
-import type { FilesShape } from './types';
+import type { FilesService } from './types';
 
 export const mutationOps = (
 	internals: FileInternals
 ): Pick<
-	FilesShape,
+	FilesService,
 	| 'setVisibility'
 	| 'trash'
 	| 'restore'
@@ -24,20 +24,24 @@ export const mutationOps = (
 > => {
 	const { db, sql } = internals;
 	const { findDashboardFile } = internals;
+
 	return {
 		setVisibility: Effect.fn('Files.setVisibility')(function* (id, isPublic) {
 			const current = yield* findDashboardFile(id);
+
 			if (current.kind === 'site' && !isPublic) {
 				return yield* new InvalidRequest({
 					status: 400,
 					message: 'Sites are always public'
 				});
 			}
+
 			const visibility = visibilityForFile(
 				current.displayName,
 				current.htmlForcedPublic ? 'text/html' : current.contentType,
 				isPublic
 			);
+
 			const updatedAt = new Date().toISOString();
 			yield* sql`
 				UPDATE files
@@ -49,6 +53,7 @@ export const mutationOps = (
 						new StorageError({ operation: 'update file visibility', cause })
 				)
 			);
+
 			return {
 				file: {
 					...current,
@@ -61,6 +66,7 @@ export const mutationOps = (
 		trash: Effect.fn('Files.trash')(function* (id) {
 			const current = yield* findDashboardFile(id);
 			const { deletedAt, purgeAt } = trashWindow(current.deletedAt, new Date());
+
 			const result = yield* Effect.tryPromise({
 				try: () =>
 					db
@@ -74,9 +80,11 @@ export const mutationOps = (
 						.run(),
 				catch: (cause) => new StorageError({ operation: 'trash file', cause })
 			});
+
 			if (result.meta.changes !== 1) {
 				return yield* new NotFound({ id });
 			}
+
 			return {
 				file: { ...current, deletedAt, updatedAt: deletedAt },
 				forcedPublic: false
@@ -85,6 +93,7 @@ export const mutationOps = (
 		restore: Effect.fn('Files.restore')(function* (id) {
 			const current = yield* findDashboardFile(id);
 			const updatedAt = new Date().toISOString();
+
 			const result = yield* Effect.tryPromise({
 				try: () =>
 					db
@@ -99,12 +108,14 @@ export const mutationOps = (
 						.run(),
 				catch: (cause) => new StorageError({ operation: 'restore file', cause })
 			});
+
 			if (result.meta.changes !== 1) {
 				return yield* new InvalidRequest({
 					status: 409,
 					message: 'This file is already being purged'
 				});
 			}
+
 			return {
 				file: { ...current, deletedAt: null, updatedAt },
 				forcedPublic: false
@@ -123,6 +134,7 @@ export const mutationOps = (
 						new StorageError({ operation: 'update file expiration', cause })
 				)
 			);
+
 			return {
 				file: { ...current, expiresAt, updatedAt },
 				forcedPublic: false
@@ -130,6 +142,7 @@ export const mutationOps = (
 		}),
 		rename: Effect.fn('Files.rename')(function* (id, value) {
 			const current = yield* findDashboardFile(id);
+
 			const displayName = yield* Effect.try({
 				try: () => cleanFileName(value),
 				catch: (cause) =>
@@ -140,11 +153,13 @@ export const mutationOps = (
 								message: 'File name is invalid'
 							})
 			});
+
 			const visibility = visibilityForFile(
 				displayName,
 				current.contentType,
 				current.public
 			);
+
 			const updatedAt = new Date().toISOString();
 			yield* Effect.tryPromise({
 				try: () =>
@@ -163,6 +178,7 @@ export const mutationOps = (
 					]),
 				catch: (cause) => new StorageError({ operation: 'rename file', cause })
 			});
+
 			return {
 				file: {
 					...current,
@@ -180,12 +196,14 @@ export const mutationOps = (
 		}),
 		schedulePurgeNow: Effect.fn('Files.schedulePurgeNow')(function* (id) {
 			const current = yield* findDashboardFile(id);
+
 			if (!current.deletedAt) {
 				return yield* new InvalidRequest({
 					status: 409,
 					message: 'Move the file to trash before deleting it permanently'
 				});
 			}
+
 			const result = yield* Effect.tryPromise({
 				try: () =>
 					db
@@ -201,12 +219,14 @@ export const mutationOps = (
 				catch: (cause) =>
 					new StorageError({ operation: 'schedule immediate purge', cause })
 			});
+
 			if (result.meta.changes !== 1) {
 				return yield* new InvalidRequest({
 					status: 409,
 					message: 'This file is already being purged'
 				});
 			}
+
 			return { file: current, forcedPublic: false };
 		}),
 		scheduleAllPurgesNow: Effect.tryPromise({
@@ -220,6 +240,7 @@ export const mutationOps = (
 					)
 					.bind('1970-01-01T00:00:00.000Z')
 					.run();
+
 				return result.meta.changes;
 			},
 			catch: (cause) =>
@@ -239,7 +260,7 @@ export const mutationOps = (
 			);
 		})
 	} satisfies Pick<
-		FilesShape,
+		FilesService,
 		| 'setVisibility'
 		| 'trash'
 		| 'restore'

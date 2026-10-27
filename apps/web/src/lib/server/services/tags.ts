@@ -1,3 +1,4 @@
+import { decodeRows } from '../decode-rows';
 import type { Tag, TagCreate, TagUpdate } from '@tdrive/shared';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { SqlClient } from 'effect/unstable/sql';
@@ -15,6 +16,7 @@ import { createObjectTtlCache } from '../isolate-cache';
 import { Db } from './bindings';
 
 const TAG_LIST_CACHE_TTL_MS = 5_000;
+
 const tagListCache = createObjectTtlCache<D1Database, ReadonlyArray<Tag>>(
 	TAG_LIST_CACHE_TTL_MS
 );
@@ -32,10 +34,7 @@ const TagRow = Schema.Struct({
 	created_at: Schema.String
 });
 
-const decodeTagRows = (rows: unknown) => {
-	const decoded = Schema.decodeUnknownOption(Schema.Array(TagRow))(rows);
-	return decoded._tag === 'Some' ? decoded.value : [];
-};
+const decodeTagRows = decodeRows(TagRow);
 
 const toTag = (row: typeof TagRow.Type): Tag => ({
 	id: row.id,
@@ -58,7 +57,7 @@ const tagSelect = `
 	LEFT JOIN file_tags ft ON ft.tag_id = t.id
 `;
 
-export interface TagsShape {
+export interface TagsService {
 	readonly list: Effect.Effect<ReadonlyArray<Tag>, StorageError>;
 	readonly create: (
 		input: TagCreate
@@ -77,7 +76,7 @@ export interface TagsShape {
 	) => Effect.Effect<void, InvalidRequest | NotFound | StorageError>;
 }
 
-export class Tags extends Context.Service<Tags, TagsShape>()('app/Tags') {}
+export class Tags extends Context.Service<Tags, TagsService>()('app/Tags') {}
 
 const makeTags = Effect.gen(function* () {
 	const db = yield* Db;
@@ -85,7 +84,9 @@ const makeTags = Effect.gen(function* () {
 
 	const list = Effect.gen(function* () {
 		const cached = tagListCache.get(db);
+
 		if (cached) return cached;
+
 		const rows = yield* sql
 			.unsafe(
 				`${tagSelect}
@@ -97,8 +98,10 @@ const makeTags = Effect.gen(function* () {
 					(cause) => new StorageError({ operation: 'list tags', cause })
 				)
 			);
+
 		const tags = decodeTagRows(rows).map(toTag);
 		tagListCache.set(db, tags);
+
 		return tags;
 	}).pipe(Effect.withSpan('Tags.list'));
 
@@ -116,8 +119,11 @@ const makeTags = Effect.gen(function* () {
 					(cause) => new StorageError({ operation: 'find tag', cause })
 				)
 			);
+
 		const tag = decodeTagRows(rows)[0];
+
 		if (!tag) return yield* new NotFound({ id });
+
 		return toTag(tag);
 	});
 
@@ -126,6 +132,7 @@ const makeTags = Effect.gen(function* () {
 	) {
 		if (normalizedNames.length === 0) return [];
 		const placeholders = normalizedNames.map(() => '?').join(', ');
+
 		const rows = yield* sql
 			.unsafe(
 				`${tagSelect}
@@ -139,6 +146,7 @@ const makeTags = Effect.gen(function* () {
 					(cause) => new StorageError({ operation: 'resolve tag names', cause })
 				)
 			);
+
 		return decodeTagRows(rows).map(toTag);
 	});
 
@@ -151,9 +159,11 @@ const makeTags = Effect.gen(function* () {
 		const existing = yield* findByNormalized(normalized);
 		const existingNames = new Set(existing.map((tag) => tag.normalizedName));
 		const createdAt = new Date().toISOString();
+
 		const missing = normalizedNames.filter(
 			(tag) => !existingNames.has(tag.normalizedName)
 		);
+
 		if (missing.length > 0) {
 			yield* Effect.tryPromise({
 				try: () =>
@@ -179,12 +189,16 @@ const makeTags = Effect.gen(function* () {
 			});
 			forgetTagListCache(db);
 		}
+
 		const resolved = yield* findByNormalized(normalized);
+
 		const byNormalized = new Map(
 			resolved.map((tag) => [tag.normalizedName, tag])
 		);
+
 		return normalized.flatMap((name) => {
 			const tag = byNormalized.get(name);
+
 			return tag ? [tag] : [];
 		});
 	});
@@ -216,18 +230,22 @@ const makeTags = Effect.gen(function* () {
 			});
 			const resolved = yield* findByNormalized([tag.normalizedName]);
 			const result = resolved[0];
+
 			if (!result) {
 				return yield* new StorageError({
 					operation: 'read created tag',
 					cause: 'Tag was not returned after creation'
 				});
 			}
+
 			forgetTagListCache(db);
+
 			return result;
 		}),
 		update: Effect.fn('Tags.update')(function* (id, input) {
 			const current = yield* find(id);
 			const nextName = input.name;
+
 			const name =
 				nextName === undefined
 					? {
@@ -235,14 +253,18 @@ const makeTags = Effect.gen(function* () {
 							normalizedName: current.normalizedName
 						}
 					: yield* validate(() => normalizeTagName(nextName));
+
 			const nextColor = input.color;
+
 			const color =
 				nextColor === undefined
 					? current.color
 					: yield* validate(() => normalizeTagColor(nextColor));
+
 			const collision = (yield* findByNormalized([name.normalizedName])).find(
 				(tag) => tag.id !== id
 			);
+
 			if (collision) {
 				return yield* new InvalidRequest({
 					status: 400,
@@ -265,6 +287,7 @@ const makeTags = Effect.gen(function* () {
 				catch: (cause) => new StorageError({ operation: 'update tag', cause })
 			});
 			forgetTagListCache(db);
+
 			return yield* find(id);
 		}),
 		remove: Effect.fn('Tags.remove')(function* (id) {
@@ -289,8 +312,10 @@ const makeTags = Effect.gen(function* () {
 							new StorageError({ operation: 'find tagged file', cause })
 					)
 				);
+
 			if (file.length === 0) return yield* new NotFound({ id: fileId });
 			const resolved = yield* resolveNames(names);
+
 			const statements = [
 				db.prepare('DELETE FROM file_tags WHERE file_id = ?').bind(fileId),
 				...resolved.map((tag) =>
@@ -303,6 +328,7 @@ const makeTags = Effect.gen(function* () {
 				),
 				...fileIndexStatements(db, fileId)
 			];
+
 			yield* Effect.tryPromise({
 				try: () => db.batch(statements),
 				catch: (cause) =>

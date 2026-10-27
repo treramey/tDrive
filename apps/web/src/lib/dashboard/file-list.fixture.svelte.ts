@@ -5,10 +5,12 @@ import { Toasts } from './toast.svelte';
 
 export const setupFileList = (
 	initialList: FileListPayload,
-	initialTrash = false
+	initialTrash = false,
+	api?: Parameters<typeof createFileList>[0]['api']
 ) => {
 	let trashed = $state(initialTrash);
 	let files!: ReturnType<typeof createFileList>;
+
 	const dispose = $effect.root(() => {
 		files = createFileList({
 			session: { ready: true, token: 'secret-token' },
@@ -17,10 +19,13 @@ export const setupFileList = (
 			tags: () => [],
 			trashed: () => trashed,
 			sort: () => 'updated',
-			initialList
+			initialList,
+			api
 		});
 	});
+
 	flushSync();
+
 	return {
 		files,
 		dispose,

@@ -13,6 +13,7 @@ describe('semantic null-object layers', () => {
 			Effect.gen(function* () {
 				const embedder = yield* Embedder;
 				const vectors = yield* VectorIndex;
+
 				return {
 					enabled: embedder.enabled && vectors.enabled,
 					documents: yield* embedder.documents(['hello']),
@@ -22,6 +23,7 @@ describe('semantic null-object layers', () => {
 				};
 			}).pipe(Effect.provide(Layer.merge(EmbedderNull, VectorIndexNull)))
 		);
+
 		expect(result).toEqual({
 			enabled: false,
 			documents: [],

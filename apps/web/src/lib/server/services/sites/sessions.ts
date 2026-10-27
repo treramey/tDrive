@@ -11,11 +11,11 @@ import {
 } from '../../site-policy';
 import { validateUploadLength } from '../../upload-stream';
 import type { SiteInternals } from './internals';
-import { ExistingSiteRow, SiteFileRow, type SitesShape } from './types';
+import { ExistingSiteRow, SiteFileRow, type SitesService } from './types';
 
 export const sessionOps = (
 	internals: SiteInternals
-): Pick<SitesShape, 'createSession' | 'stageAsset' | 'commit' | 'abort'> => {
+): Pick<SitesService, 'createSession' | 'stageAsset' | 'commit' | 'abort'> => {
 	const {
 		all,
 		findSession,
@@ -43,6 +43,7 @@ export const sessionOps = (
 					})
 				)
 			);
+
 			const prepared = yield* Effect.try({
 				try: () => prepareSiteManifest(input, config.maxUploadBytes),
 				catch: (cause) =>
@@ -53,17 +54,20 @@ export const sessionOps = (
 								message: 'Site manifest is invalid'
 							})
 			});
+
 			// Declared manifest sizes gate the whole publish before any asset
 			// bytes are accepted; per-asset uploads re-verify actual lengths.
 			const declaredBytes = prepared.assets.reduce(
 				(total, asset) => total + asset.sizeBytes,
 				0
 			);
+
 			yield* ensureStorageQuota(db, config.maxTotalBytes, declaredBytes);
 
 			let fileId: string = crypto.randomUUID();
 			let version = 1;
 			let displayName = prepared.displayName;
+
 			if (input.fileId !== undefined) {
 				const rows = yield* all(
 					db
@@ -77,7 +81,9 @@ export const sessionOps = (
 					ExistingSiteRow,
 					'find site to republish'
 				);
+
 				const current = rows[0];
+
 				if (!current) return yield* new NotFound({ id: input.fileId });
 				fileId = current.id;
 				version = current.current_version + 1;
@@ -86,9 +92,11 @@ export const sessionOps = (
 
 			const id = crypto.randomUUID();
 			const createdAt = new Date().toISOString();
+
 			const expiresAt = new Date(
 				new Date(createdAt).getTime() + SITE_SESSION_TTL_MS
 			).toISOString();
+
 			const statements = [
 				db
 					.prepare(
@@ -107,6 +115,7 @@ export const sessionOps = (
 						.bind(id, asset.path, asset.sizeBytes, asset.contentType)
 				)
 			];
+
 			yield* Effect.tryPromise({
 				try: () => db.batch(statements),
 				catch: (cause) =>
@@ -125,6 +134,7 @@ export const sessionOps = (
 					})
 				)
 			);
+
 			return { sessionId: id, fileId, version, expiresAt };
 		}),
 		stageAsset: Effect.fn('Sites.stageAsset')(function* (input) {
@@ -139,6 +149,7 @@ export const sessionOps = (
 								message: 'Site upload session is unavailable'
 							})
 			});
+
 			const path = yield* Effect.try({
 				try: () => normalizeSitePath(input.path),
 				catch: () =>
@@ -147,15 +158,19 @@ export const sessionOps = (
 						message: 'Site asset path is unsafe'
 					})
 			});
+
 			const assets = yield* stagedAssets(session.id);
 			const asset = assets.find((candidate) => candidate.path === path);
+
 			if (!asset) return yield* new NotFound({ id: path });
+
 			if (asset.r2Key !== null) {
 				return yield* new InvalidRequest({
 					status: 409,
 					message: 'Site asset was already uploaded'
 				});
 			}
+
 			const size = yield* Effect.try({
 				try: () =>
 					validateUploadLength(input.contentLength, config.maxUploadBytes),
@@ -167,6 +182,7 @@ export const sessionOps = (
 								message: 'Site asset length is invalid'
 							})
 			});
+
 			if (size !== asset.expectedSizeBytes) {
 				return yield* new InvalidRequest({
 					status: 409,
@@ -175,13 +191,16 @@ export const sessionOps = (
 			}
 
 			const r2Key = `s/${session.fileId}/${session.version}/${crypto.randomUUID()}`;
+
 			const stored = yield* blobs.put(
 				r2Key,
 				input.body,
 				size,
 				asset.contentType
 			);
+
 			const uploadedAt = new Date().toISOString();
+
 			const update = yield* Effect.tryPromise({
 				try: () =>
 					db
@@ -213,13 +232,16 @@ export const sessionOps = (
 					)
 				)
 			);
+
 			if (update.meta.changes !== 1) {
 				yield* compensateStagedBlob(session, r2Key);
+
 				return yield* new InvalidRequest({
 					status: 409,
 					message: 'Site upload session changed while the asset was uploading'
 				});
 			}
+
 			return { path, sizeBytes: stored.size, contentType: asset.contentType };
 		}),
 		commit: Effect.fn('Sites.commit')(function* (sessionId) {
@@ -235,6 +257,7 @@ export const sessionOps = (
 							})
 			});
 			const assets = yield* stagedAssets(session.id);
+
 			const totalSize = yield* Effect.try({
 				try: () => validateCommittedAssets(assets),
 				catch: (cause) =>
@@ -245,8 +268,10 @@ export const sessionOps = (
 								message: 'Site assets are incomplete'
 							})
 			});
+
 			const publishedAt = new Date().toISOString();
 			const versionKey = `site-version/${session.fileId}/${session.version}/${session.id}`;
+
 			const guard =
 				session.version === 1
 					? db
@@ -274,6 +299,7 @@ export const sessionOps = (
 								session.fileId,
 								session.version - 1
 							);
+
 			const statements = [
 				guard,
 				db
@@ -389,6 +415,7 @@ export const sessionOps = (
 			const commit = Effect.tryPromise({
 				try: async () => {
 					const results = await db.batch(statements);
+
 					if (results[0]?.meta.changes !== 1) {
 						throw new Error('The site changed while it was publishing');
 					}
@@ -396,6 +423,7 @@ export const sessionOps = (
 				catch: (cause) =>
 					new StorageError({ operation: 'commit site version', cause })
 			});
+
 			yield* commit.pipe(
 				Effect.catch((failure) =>
 					cleanupStaged(session, 'aborted').pipe(
@@ -425,10 +453,12 @@ export const sessionOps = (
 								cause: String(cause)
 							})
 						);
+
 						return true;
 					})
 				)
 			);
+
 			const rows = yield* all(
 				db
 					.prepare(
@@ -442,13 +472,16 @@ export const sessionOps = (
 				SiteFileRow,
 				'read published site'
 			);
+
 			const file = rows[0];
+
 			if (!file) {
 				return yield* new StorageError({
 					operation: 'read published site',
 					cause: 'Committed site metadata was not found'
 				});
 			}
+
 			return {
 				file: {
 					id: file.id,
@@ -473,9 +506,11 @@ export const sessionOps = (
 		}),
 		abort: Effect.fn('Sites.abort')(function* (sessionId) {
 			const session = yield* findSession(sessionId);
+
 			if (session.status === 'complete') {
 				return yield* new NotFound({ id: sessionId });
 			}
+
 			yield* cleanupStaged(session, 'aborted');
 		})
 	};

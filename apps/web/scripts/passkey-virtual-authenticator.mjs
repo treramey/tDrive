@@ -6,23 +6,31 @@ import { createRequire } from 'node:module';
 
 const { chromium } = createRequire('/tmp/pw/package.json')('playwright');
 const evidence = process.argv[2];
+
 if (!evidence) throw new Error('Pass an evidence directory');
+
 await mkdir(evidence, { recursive: true });
+
 const origin = 'http://localhost:5173';
 const browser = await chromium.launch({ headless: true });
+
 const context = await browser.newContext({
 	viewport: { width: 1280, height: 950 },
 	recordVideo: { dir: join(evidence, 'passkey-video') }
 });
+
 const page = await context.newPage();
 const cdp = await context.newCDPSession(page);
 const actions = [];
 const errors = [];
+
 page.on('pageerror', (error) => errors.push(error.message));
+
 const record = (action, result) => {
 	actions.push({ action, result });
 	console.log(result);
 };
+
 const capture = async (name) => {
 	await page.screenshot({
 		path: join(evidence, `${name}.png`),
@@ -33,6 +41,7 @@ const capture = async (name) => {
 		await page.locator('body').ariaSnapshot()
 	);
 };
+
 const signInWithPassword = async () => {
 	await page
 		.getByLabel('Passcode', { exact: true })
@@ -40,6 +49,7 @@ const signInWithPassword = async () => {
 	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await page.getByRole('link', { name: 'Settings', exact: true }).waitFor();
 };
+
 const signOut = async () => {
 	const signedOut = page.waitForResponse(
 		(response) =>
@@ -47,6 +57,7 @@ const signOut = async () => {
 			response.request().method() === 'DELETE' &&
 			response.status() === 204
 	);
+
 	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 	await signedOut;
 	await page
@@ -55,10 +66,13 @@ const signOut = async () => {
 	await page.goto(origin);
 	await page.getByRole('heading', { name: 'Sign in to your drive' }).waitFor();
 };
+
 const passkeys = () =>
 	page.getByRole('region', { name: 'Passkeys', exact: true });
+
 let failure;
 let authenticatorId;
+
 try {
 	await cdp.send('WebAuthn.enable');
 	({ authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -83,11 +97,13 @@ try {
 	await passkeys()
 		.getByLabel('Current passcode to add')
 		.fill('adrive-verification-local-only');
+
 	const optionsResponse = page.waitForResponse(
 		(response) =>
 			response.url().endsWith('/api/auth/passkeys/enroll/options') &&
 			response.status() === 200
 	);
+
 	await passkeys()
 		.getByRole('button', { name: 'Add passkey', exact: true })
 		.click();
@@ -117,9 +133,11 @@ try {
 		`${origin}/api/auth/passkeys/login/options`,
 		{ headers: { origin }, data: {} }
 	);
+
 	assert.equal(leakedOptions.status(), 200);
 	const copied = await leakedOptions.json();
 	const isolated = await browser.newContext();
+
 	try {
 		const noBinding = await isolated.request.post(
 			`${origin}/api/auth/passkeys/login/verify`,
@@ -142,6 +160,7 @@ try {
 				}
 			}
 		);
+
 		assert.equal(noBinding.status(), 401);
 		record(
 			'Submit a copied ceremony ID from a second browser context',
@@ -181,9 +200,11 @@ try {
 		.getByRole('button', { name: 'Sign in with a passkey', exact: true })
 		.click();
 	await page.getByRole('link', { name: 'Settings', exact: true }).waitFor();
+
 	const sessionCookie = (await context.cookies(origin)).find(
 		(cookie) => cookie.name === '__Host-adrive-session'
 	);
+
 	assert.ok(sessionCookie);
 	assert.equal(sessionCookie.secure, true);
 	assert.equal(sessionCookie.httpOnly, true);
@@ -292,7 +313,9 @@ try {
 		) + '\n'
 	);
 }
+
 if (failure) throw failure;
+
 console.log(
 	`PASS. ${actions.length} passkey browser checks. Evidence saved to ${evidence}.`
 );

@@ -1,27 +1,25 @@
 import { FileDetailResponseSchema } from '@tdrive/shared';
-import { Schema } from 'effect';
+import { Schema, Option } from 'effect';
 import type { PageServerLoad } from './$types';
 
 const readError = async (response: Response) => {
 	try {
-		const body: unknown = await response.json();
-		if (
-			typeof body === 'object' &&
-			body !== null &&
-			'message' in body &&
-			typeof body.message === 'string'
-		) {
-			return body.message;
-		}
+		const body = Schema.decodeUnknownOption(
+			Schema.Struct({ message: Schema.String })
+		)(await response.json());
+
+		if (Option.isSome(body)) return body.value.message;
 	} catch {
 		// The status fallback below is enough for non-JSON failures.
 	}
+
 	return `Could not load the file (${response.status})`;
 };
 
 export const load: PageServerLoad = async ({ depends, fetch, params }) => {
 	depends(`tdrive:file:${params.id}`);
 	let response: Response;
+
 	try {
 		response = await fetch(`/api/files/${encodeURIComponent(params.id)}`);
 	} catch {
@@ -30,12 +28,15 @@ export const load: PageServerLoad = async ({ depends, fetch, params }) => {
 			initialError: 'Could not load the file'
 		};
 	}
+
 	if (response.status === 401) {
 		return { initialDetail: null, initialError: '' };
 	}
+
 	if (!response.ok) {
 		return { initialDetail: null, initialError: await readError(response) };
 	}
+
 	try {
 		return {
 			initialDetail: await Schema.decodeUnknownPromise(

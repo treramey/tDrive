@@ -53,9 +53,11 @@ export class UploadManager {
 	#active = 0;
 	#disposed = false;
 	#onComplete: () => void;
+	#upload: typeof uploadFile;
 
-	constructor(onComplete: () => void) {
+	constructor(onComplete: () => void, upload: typeof uploadFile = uploadFile) {
 		this.#onComplete = onComplete;
+		this.#upload = upload;
 	}
 
 	get pending() {
@@ -75,6 +77,7 @@ export class UploadManager {
 				uploaded: 0,
 				total: file.size
 			} satisfies UploadItem;
+
 			this.#files.set(item.id, file);
 			this.#defaults.set(item.id, {
 				token: defaults.token,
@@ -82,14 +85,17 @@ export class UploadManager {
 				tagNames: defaults.tags.map((tag) => tag.name),
 				expiresAt: defaults.expiresAt
 			});
+
 			return item;
 		});
+
 		this.items = [...this.items, ...additions];
 		this.#schedule();
 	}
 
 	cancel(id: string) {
 		const item = this.items.find((candidate) => candidate.id === id);
+
 		if (
 			!item ||
 			(item.status !== 'queued' &&
@@ -106,6 +112,7 @@ export class UploadManager {
 
 	retry(id: string) {
 		const item = this.items.find((candidate) => candidate.id === id);
+
 		if (
 			this.#disposed ||
 			item?.status !== 'error' ||
@@ -121,6 +128,7 @@ export class UploadManager {
 
 	remove(id: string) {
 		const item = this.items.find((candidate) => candidate.id === id);
+
 		if (!item || item.status === 'queued' || item.status === 'uploading') {
 			return;
 		}
@@ -135,6 +143,7 @@ export class UploadManager {
 				this.#release(item.id);
 			}
 		}
+
 		this.items = this.items.filter(
 			(item) => item.status !== 'done' && item.status !== 'cancelled'
 		);
@@ -144,6 +153,7 @@ export class UploadManager {
 		for (const controller of this.#controllers.values()) {
 			controller.abort();
 		}
+
 		this.#controllers.clear();
 		this.#defaults.clear();
 		this.#files.clear();
@@ -167,6 +177,7 @@ export class UploadManager {
 
 		while (this.#active < 3) {
 			const next = this.items.find((item) => item.status === 'queued');
+
 			if (!next) return;
 			this.#active += 1;
 			this.#update(next.id, { status: 'uploading' });
@@ -180,15 +191,18 @@ export class UploadManager {
 	async #run(id: string) {
 		const file = this.#files.get(id);
 		const defaults = this.#defaults.get(id);
+
 		if (!file || !defaults) {
 			this.#update(id, { status: 'cancelled' });
+
 			return;
 		}
 
 		const controller = new AbortController();
 		this.#controllers.set(id, controller);
+
 		try {
-			const result = await uploadFile(
+			const result = await this.#upload(
 				defaults.token,
 				file,
 				defaults.public,
@@ -206,6 +220,7 @@ export class UploadManager {
 					}
 				}
 			);
+
 			if (
 				this.#disposed ||
 				controller.signal.aborted ||

@@ -12,10 +12,13 @@ export const tagList = Command.make('list', {}, () =>
 	Effect.gen(function* () {
 		const config = yield* loadConfig;
 		const client = yield* HttpClient.HttpClient;
+
 		const response = yield* client
 			.execute(apiRequest('GET', `${config.endpoint}/api/tags`, config.apiKey))
 			.pipe(Effect.flatMap(ensureOk));
+
 		const result = yield* decodeBody(TagListResponseSchema, response);
+
 		if (wantsJson()) {
 			yield* emit(result);
 		} else {
@@ -36,16 +39,18 @@ export const tagCreate = Command.make(
 		Effect.gen(function* () {
 			const config = yield* loadConfig;
 			const client = yield* HttpClient.HttpClient;
+
 			const response = yield* client
 				.execute(
 					apiRequest('POST', `${config.endpoint}/api/tags`, config.apiKey, {
 						body: HttpBody.jsonUnsafe({
 							name,
-							...(Option.isSome(color) ? { color: color.value } : {})
+							color: Option.getOrUndefined(color)
 						})
 					})
 				)
 				.pipe(Effect.flatMap(ensureOk));
+
 			const result = yield* decodeBody(TagResponseSchema, response);
 			yield* emit(wantsJson() ? result : result.tag.name);
 		})
@@ -65,8 +70,10 @@ export const tagUpdate = Command.make(
 					message: 'Provide --name or --color'
 				});
 			}
+
 			const config = yield* loadConfig;
 			const client = yield* HttpClient.HttpClient;
+
 			const response = yield* client
 				.execute(
 					apiRequest(
@@ -75,13 +82,14 @@ export const tagUpdate = Command.make(
 						config.apiKey,
 						{
 							body: HttpBody.jsonUnsafe({
-								...(Option.isSome(name) ? { name: name.value } : {}),
-								...(Option.isSome(color) ? { color: color.value } : {})
+								name: Option.getOrUndefined(name),
+								color: Option.getOrUndefined(color)
 							})
 						}
 					)
 				)
 				.pipe(Effect.flatMap(ensureOk));
+
 			const result = yield* decodeBody(TagResponseSchema, response);
 			yield* emit(wantsJson() ? result : result.tag.name);
 		})

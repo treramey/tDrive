@@ -6,5 +6,6 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
 		event.data instanceof ArrayBuffer
 			? await convertDocx(event.data)
 			: { kind: 'error' };
+
 	self.postMessage(result);
 };

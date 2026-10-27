@@ -1,3 +1,4 @@
+import { decodeRows } from '../decode-rows';
 import { Cause, Context, Effect, Layer, Schema } from 'effect';
 import { StorageError } from '../errors';
 import {
@@ -29,6 +30,7 @@ import { Embedder, VectorIndex } from './semantic';
 const INDEX_LEASE_MS = 5 * 60 * 1_000;
 const EMBEDDING_MODEL = '@cf/baai/bge-small-en-v1.5';
 const SEMANTIC_STATUS_CACHE_TTL_MS = 10_000;
+
 const semanticStatusCache = createObjectTtlCache<D1Database, SemanticStatus>(
 	SEMANTIC_STATUS_CACHE_TTL_MS
 );
@@ -57,11 +59,6 @@ const CountRow = Schema.Struct({
 	count: Schema.Int
 });
 
-const decodeRows = <A, I>(schema: Schema.Codec<A, I, never>, rows: unknown) => {
-	const decoded = Schema.decodeUnknownOption(Schema.Array(schema))(rows);
-	return decoded._tag === 'Some' ? decoded.value : [];
-};
-
 export interface SemanticStatus {
 	readonly enabled: boolean;
 	readonly indexedChunks: number;
@@ -70,7 +67,7 @@ export interface SemanticStatus {
 	readonly costNotice: string;
 }
 
-export interface IndexingShape {
+export interface IndexingService {
 	readonly enqueue: (fileId: string) => Effect.Effect<void, StorageError>;
 	readonly process: (fileId: string) => Effect.Effect<void, StorageError>;
 	readonly runDue: (limit: number) => Effect.Effect<number, StorageError>;
@@ -80,7 +77,7 @@ export interface IndexingShape {
 	readonly status: Effect.Effect<SemanticStatus, StorageError>;
 }
 
-export class Indexing extends Context.Service<Indexing, IndexingShape>()(
+export class Indexing extends Context.Service<Indexing, IndexingService>()(
 	'app/Indexing'
 ) {}
 
@@ -101,12 +98,15 @@ const makeIndexing = Effect.gen(function* () {
 		const rows = yield* Effect.tryPromise({
 			try: async () => {
 				const result = await statement.all();
+
 				if (!result.success) throw new Error(result.error ?? operation);
+
 				return result.results;
 			},
 			catch: (cause) => new StorageError({ operation, cause })
 		});
-		return decodeRows(schema, rows);
+
+		return decodeRows(schema)(rows);
 	});
 
 	const findJob = Effect.fn('Indexing.findJob')(function* (fileId: string) {
@@ -128,6 +128,7 @@ const makeIndexing = Effect.gen(function* () {
 			IndexJobRow,
 			'find indexing job'
 		);
+
 		return rows[0] ?? null;
 	});
 
@@ -138,12 +139,14 @@ const makeIndexing = Effect.gen(function* () {
 	) {
 		const disposition = indexFailureDisposition(lease.attempt);
 		const error = safeIndexError(cause);
+
 		const commands = indexFailureCommands(
 			lease,
 			vectorIds,
 			{ ...disposition, error },
 			new Date().toISOString()
 		);
+
 		const results = yield* Effect.tryPromise({
 			try: () => db.batch(commands.map(prepareCommand)),
 			catch: (failure) =>
@@ -152,6 +155,7 @@ const makeIndexing = Effect.gen(function* () {
 					cause: failure
 				})
 		});
+
 		const stateChanged = results.at(-1)?.meta.changes === 1;
 		console.error(
 			JSON.stringify({
@@ -173,6 +177,7 @@ const makeIndexing = Effect.gen(function* () {
 			if (!vectors.enabled) return 0;
 			const bounded = Math.max(1, Math.min(limit, 100));
 			const now = new Date().toISOString();
+
 			const rows = yield* all(
 				db
 					.prepare(
@@ -186,8 +191,10 @@ const makeIndexing = Effect.gen(function* () {
 				PendingVectorRow,
 				'list pending vector deletes'
 			);
+
 			if (rows.length === 0) return 0;
 			const ids = rows.map((row) => row.vector_id);
+
 			const removed = yield* vectors.remove(ids).pipe(
 				Effect.as(true),
 				Effect.catch((failure) =>
@@ -210,6 +217,7 @@ const makeIndexing = Effect.gen(function* () {
 					}).pipe(Effect.as(false))
 				)
 			);
+
 			if (!removed) return 0;
 			yield* Effect.tryPromise({
 				try: () => prepareCommand(vectorDeleteSuccessCommand(ids)).run(),
@@ -219,21 +227,25 @@ const makeIndexing = Effect.gen(function* () {
 						cause
 					})
 			});
+
 			return ids.length;
 		}
 	);
 
 	const perform = Effect.fn('Indexing.perform')(function* (fileId: string) {
 		const initial = yield* findJob(fileId);
+
 		if (!initial) return;
 		const now = new Date();
 		const leaseUntil = new Date(now.getTime() + INDEX_LEASE_MS).toISOString();
+
 		const lease = {
 			fileId,
 			version: initial.current_version,
 			attempt: initial.index_attempts + 1,
 			token: newIndexLeaseToken()
 		} satisfies IndexLease;
+
 		const claim = yield* Effect.tryPromise({
 			try: () =>
 				prepareCommand(
@@ -247,6 +259,7 @@ const makeIndexing = Effect.gen(function* () {
 			catch: (cause) =>
 				new StorageError({ operation: 'claim indexing job', cause })
 		});
+
 		if (claim.meta.changes !== 1) return;
 
 		let attemptVectorIds: ReadonlyArray<string> = [];
@@ -268,6 +281,7 @@ const makeIndexing = Effect.gen(function* () {
 						cause
 					})
 			});
+
 			if (extracted[1]?.meta.changes !== 1) {
 				console.log(
 					JSON.stringify({
@@ -277,6 +291,7 @@ const makeIndexing = Effect.gen(function* () {
 						attempt: lease.attempt
 					})
 				);
+
 				return;
 			}
 
@@ -289,6 +304,7 @@ const makeIndexing = Effect.gen(function* () {
 							cause
 						})
 				});
+
 				if (finished.meta.changes !== 1) {
 					console.log(
 						JSON.stringify({
@@ -299,13 +315,16 @@ const makeIndexing = Effect.gen(function* () {
 						})
 					);
 				}
+
 				return;
 			}
 
 			const chunks = chunkSearchText(initial.display_name, text);
+
 			const embeddings = yield* embedder.documents(
 				chunks.map((chunk) => chunk.text)
 			);
+
 			if (embeddings.length !== chunks.length) {
 				return yield* new StorageError({
 					operation: 'validate embeddings',
@@ -324,6 +343,7 @@ const makeIndexing = Effect.gen(function* () {
 					visibility: initial.is_public === 1 ? 'public' : 'private'
 				}
 			}));
+
 			attemptVectorIds = vectorRecords.map((record) => record.id);
 			yield* vectors.upsert(vectorRecords);
 
@@ -343,6 +363,7 @@ const makeIndexing = Effect.gen(function* () {
 						cause
 					})
 			});
+
 			if (results.at(-1)?.meta.changes !== 1) {
 				console.log(
 					JSON.stringify({
@@ -408,6 +429,7 @@ const makeIndexing = Effect.gen(function* () {
 		const bounded = Math.max(1, Math.min(limit, 10));
 		const now = new Date().toISOString();
 		const includeDisabled = embedder.enabled && vectors.enabled ? 1 : 0;
+
 		const rows = yield* Effect.tryPromise({
 			try: async () => {
 				const result = await db
@@ -428,14 +450,18 @@ const makeIndexing = Effect.gen(function* () {
 					)
 					.bind(now, MAX_INDEX_ATTEMPTS, now, now, includeDisabled, bounded)
 					.all<{ id: string }>();
+
 				if (!result.success)
 					throw new Error(result.error ?? 'Index job listing failed');
+
 				return result.results;
 			},
 			catch: (cause) =>
 				new StorageError({ operation: 'list due indexing jobs', cause })
 		});
+
 		for (const row of rows) yield* process(row.id);
+
 		return rows.length;
 	});
 
@@ -460,17 +486,20 @@ const makeIndexing = Effect.gen(function* () {
 
 	const status = Effect.gen(function* () {
 		const cached = semanticStatusCache.get(db);
+
 		if (cached) {
 			return {
 				...cached,
 				enabled: embedder.enabled && vectors.enabled
 			};
 		}
+
 		const rows = yield* all(
 			db.prepare('SELECT COUNT(*) AS count FROM file_chunks'),
 			CountRow,
 			'count indexed chunks'
 		);
+
 		const result = {
 			enabled: embedder.enabled && vectors.enabled,
 			indexedChunks: rows[0]?.count ?? 0,
@@ -479,7 +508,9 @@ const makeIndexing = Effect.gen(function* () {
 			costNotice:
 				'Vectorize bills each query against stored vectors × 384 dimensions; keyword search stays available when semantic search is off.'
 		};
+
 		semanticStatusCache.set(db, result);
+
 		return result;
 	}).pipe(Effect.withSpan('Indexing.status'));
 

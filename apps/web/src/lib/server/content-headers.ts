@@ -31,6 +31,7 @@ export const contentDisposition = (
 		INLINE_TYPES.some((pattern) => pattern.test(contentType))
 			? 'inline'
 			: 'attachment';
+
 	return `${disposition}; filename="${asciiFilename(name)}"; filename*=UTF-8''${encodedFilename(name)}`;
 };
 

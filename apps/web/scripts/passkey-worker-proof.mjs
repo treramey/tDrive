@@ -6,17 +6,23 @@ import { resolve, join } from 'node:path';
 import { softwareAuthenticator } from '../src/lib/server/test/fixtures/authenticator.ts';
 
 const require = createRequire(import.meta.url);
+
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
 	require.resolve('wrangler/package.json')
 )('miniflare');
+
 const root = resolve(import.meta.dirname, '..');
 const evidence = process.argv[2];
+
 if (!evidence) throw new Error('Pass an evidence directory');
+
 const origin = 'http://localhost:5173';
 const workerMain = join(root, '.svelte-kit/cloudflare/_worker.js');
+
 const { build } = createRequire(require.resolve('wrangler/package.json'))(
 	'esbuild'
 );
+
 const bundle = await build({
 	entryPoints: [workerMain],
 	bundle: true,
@@ -27,9 +33,11 @@ const bundle = await build({
 	mainFields: ['browser', 'module', 'main'],
 	external: ['cloudflare:*', 'node:*']
 });
+
 const modules = [
 	{ type: 'ESModule', path: workerMain, contents: bundle.outputFiles[0].text }
 ];
+
 const mf = new Miniflare(
 	convertV4MiniflareOptions({
 		modules,
@@ -55,8 +63,10 @@ const mf = new Miniflare(
 		}
 	})
 );
+
 const cookies = new Map();
 const observations = [];
+
 const request = async (path, body, method = 'POST') => {
 	const response = await mf.dispatchFetch(origin + path, {
 		method,
@@ -68,17 +78,23 @@ const request = async (path, body, method = 'POST') => {
 		},
 		body: method === 'GET' ? undefined : JSON.stringify(body)
 	});
+
 	for (const cookie of response.headers.getSetCookie()) {
 		const pair = cookie.split(';', 1)[0];
 		const index = pair.indexOf('=');
 		cookies.set(pair.slice(0, index), pair.slice(index + 1));
 	}
+
 	observations.push({ method, path, status: response.status });
+
 	return response;
 };
+
 let failure;
+
 try {
 	const db = await mf.getD1Database('DB');
+
 	for (const name of (await readdir(join(root, 'migrations')))
 		.filter((file) => file.endsWith('.sql'))
 		.sort()) {
@@ -91,10 +107,13 @@ try {
 				.bind('0'.repeat(64))
 				.run();
 		}
+
 		const sql = await readFile(join(root, 'migrations', name), 'utf8');
+
 		for (const statement of require('wrangler').unstable_splitSqlQuery(sql))
 			await db.prepare(statement).run();
 	}
+
 	assert.deepEqual(
 		await db
 			.prepare('SELECT * FROM dashboard_sessions WHERE token_hash = ?')
@@ -125,18 +144,23 @@ try {
 		).status,
 		200
 	);
+
 	for (const algorithm of ['ES256', 'RS256']) {
 		const device = await softwareAuthenticator(algorithm);
+
 		let response = await request('/api/auth/passkeys/enroll/options', {
 			name: algorithm,
 			passcode: 'adrive-worker-proof-local-only'
 		});
+
 		assert.equal(response.status, 200);
 		const enrollment = await response.json();
+
 		const credential = await device.register({
 			challenge: enrollment.options.challenge,
 			packed: true
 		});
+
 		assert.equal(
 			(
 				await request('/api/auth/passkeys/enroll/verify', {
@@ -149,10 +173,12 @@ try {
 		response = await request('/api/auth/passkeys/login/options', {});
 		assert.equal(response.status, 200);
 		const login = await response.json();
+
 		const assertion = await device.assert({
 			challenge: login.options.challenge,
 			userHandle: enrollment.options.user.id
 		});
+
 		const bindingCookies = new Map(cookies);
 		assert.equal(
 			(
@@ -167,6 +193,7 @@ try {
 			(await request('/api/auth/check', undefined, 'GET')).status,
 			200
 		);
+
 		for (const [name, value] of bindingCookies) cookies.set(name, value);
 		assert.equal(
 			(
@@ -177,14 +204,17 @@ try {
 			).status,
 			401
 		);
+
 		const invalid = await (
 			await request('/api/auth/passkeys/login/options', {})
 		).json();
+
 		const bad = await device.assert({
 			challenge: invalid.options.challenge,
 			userHandle: enrollment.options.user.id,
 			badSignature: true
 		});
+
 		assert.equal(
 			(
 				await request('/api/auth/passkeys/login/verify', {
@@ -195,6 +225,7 @@ try {
 			401
 		);
 	}
+
 	const tables = [
 		'credential_state',
 		'auth_owner',
@@ -202,16 +233,19 @@ try {
 		'dashboard_sessions',
 		'passkey_challenges'
 	];
+
 	const dump = await db
 		.prepare('PRAGMA miniflare_d1_export(?,?,?);')
 		.bind(false, false, ...tables)
 		.raw();
+
 	const restored = await mf.getD1Database('RESTORE_DB');
 	await restored.batch(
 		require('wrangler')
 			.unstable_splitSqlQuery(dump[0].join('\n'))
 			.map((statement) => restored.prepare(statement))
 	);
+
 	for (const table of tables) {
 		const query = `SELECT * FROM ${table} ORDER BY 1`;
 		assert.deepEqual(
@@ -219,13 +253,16 @@ try {
 			await db.prepare(query).raw()
 		);
 	}
+
 	assert.deepEqual(
 		await restored.prepare('PRAGMA foreign_key_check').raw(),
 		[]
 	);
+
 	const restoredKey = await restored
 		.prepare("SELECT id FROM passkeys WHERE name = 'ES256'")
 		.first('id');
+
 	assert.equal(
 		await restored
 			.prepare('SELECT count(*) FROM dashboard_sessions WHERE passkey_id = ?')
@@ -277,7 +314,9 @@ try {
 		) + '\n'
 	);
 }
+
 if (failure) throw failure;
+
 console.log(
 	'PASS. Populated migration and D1 dump restore preserve sessions. Generated Worker verifies ES256 and RS256 and rejects replays and bad signatures.'
 );

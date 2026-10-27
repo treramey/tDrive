@@ -21,6 +21,7 @@
 		| { kind: 'loading' }
 		| { kind: 'ready'; blocks: DocumentBlock[] }
 		| { kind: 'error'; message: string };
+
 	let previewState = $state<PreviewState>({ kind: 'loading' });
 	let retry = $state(0);
 
@@ -49,6 +50,7 @@
 							: 'This document could not be previewed'
 				};
 			});
+
 		return () => controller.abort();
 	});
 </script>

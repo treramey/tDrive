@@ -10,14 +10,17 @@ import { Auth, authorizeRequest } from '$lib/server/services/auth';
 
 const requestedVersion = (url: URL) => {
 	const value = url.searchParams.get('v');
+
 	if (value === null) return;
 	const version = Number(value);
+
 	if (!Number.isSafeInteger(version) || version < 1) {
 		throw new InvalidRequest({
 			status: 400,
 			message: 'Version must be a positive integer'
 		});
 	}
+
 	return version;
 };
 
@@ -26,6 +29,7 @@ export const GET: RequestHandler = ({ cookies, params, request, url }) =>
 		Effect.gen(function* () {
 			const auth = yield* Auth;
 			yield* authorizeRequest(auth, request, url, cookies);
+
 			return contentLinkJsonResponse(
 				yield* resolveFileContentLink(
 					params.id,

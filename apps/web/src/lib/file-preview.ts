@@ -2,12 +2,14 @@ export const maxPreviewBytes = 1024 * 1024;
 export const maxDocxPreviewBytes = 5 * 1024 * 1024;
 export const maxDocxOutputBytes = 2 * 1024 * 1024;
 export const docxConversionTimeoutMs = 10_000;
+
 export const docxMediaType =
 	'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 export type PreviewKind = 'markdown' | 'text' | 'docx';
 
 const markdownExtensions = /\.(?:md|markdown|mdown|mkd)$/i;
+
 const textExtensions =
 	/\.(?:txt|csv|tsv|json|jsonl|xml|ya?ml|toml|ini|log|css|js|mjs|cjs|ts|mts|cts|jsx|tsx|svelte|html?|svg|sh|zsh|bash|fish|py|rb|rs|go|java|kt|swift|sql)$/i;
 
@@ -16,6 +18,7 @@ export const previewKind = (
 	contentType: string
 ): PreviewKind | null => {
 	const normalizedType = contentType.split(';', 1)[0]?.trim().toLowerCase();
+
 	if (
 		normalizedType === docxMediaType ||
 		(/\.docx$/i.test(displayName) &&
@@ -26,6 +29,7 @@ export const previewKind = (
 	) {
 		return 'docx';
 	}
+
 	if (
 		normalizedType === 'text/markdown' ||
 		normalizedType === 'text/x-markdown' ||
@@ -33,6 +37,7 @@ export const previewKind = (
 	) {
 		return 'markdown';
 	}
+
 	if (
 		normalizedType?.startsWith('text/') ||
 		normalizedType === 'application/json' ||
@@ -41,5 +46,6 @@ export const previewKind = (
 	) {
 		return 'text';
 	}
+
 	return null;
 };

@@ -24,8 +24,10 @@
 	const html = $derived(
 		file.kind === 'site' || file.contentType.startsWith('text/html')
 	);
+
 	const kind = $derived(previewKind(file.displayName, file.contentType));
 	const textLike = $derived(!html && (kind === 'text' || kind === 'markdown'));
+
 	const media = $derived(
 		html ||
 			file.contentType.startsWith('image/') ||
@@ -33,13 +35,16 @@
 			file.contentType.startsWith('audio/') ||
 			file.contentType === 'application/pdf'
 	);
+
 	const preview = resource(
 		() => [token, file.id, file.version, textLike] as const,
 		async ([auth, id, version, shouldLoad], _previous, { signal }) => {
 			const result = shouldLoad
 				? await getFilePreview(auth, id, version, signal)
 				: { kind: '', text: '' };
+
 			signal.throwIfAborted();
+
 			return result;
 		}
 	);
@@ -51,31 +56,42 @@
 	let linkGeneration = 0;
 	let activeLinkKey = '';
 	let expirationTick = $state(0);
+
 	const expirationTime = $derived(
 		file.expiresAt ? new Date(file.expiresAt).getTime() : Number.NaN
 	);
+
 	const expired = $derived.by(() => {
-		expirationTick;
+		void expirationTick;
+
 		return Number.isFinite(expirationTime) && expirationTime <= Date.now();
 	});
+
 	const unavailable = $derived(file.deletedAt !== null || expired);
 
 	$effect(() => {
 		const target = expirationTime;
+
 		if (!Number.isFinite(target) || target <= Date.now()) return;
 		let timer: ReturnType<typeof setTimeout> | undefined;
+
 		const checkExpiration = () => {
 			const remaining = target - Date.now();
+
 			if (remaining <= 0) {
 				expirationTick += 1;
+
 				return;
 			}
+
 			timer = setTimeout(
 				checkExpiration,
 				Math.min(remaining + 25, 2_147_000_000)
 			);
 		};
+
 		checkExpiration();
+
 		return () => {
 			if (timer !== undefined) clearTimeout(timer);
 		};
@@ -93,6 +109,7 @@
 			shouldLoad: media,
 			origin: contentOrigin
 		};
+
 		return {
 			...source,
 			identityKey: [
@@ -123,6 +140,7 @@
 			origin,
 			identityKey
 		} = linkSource;
+
 		const refreshIteration = linkRefresh;
 		const sameIdentity = activeLinkKey === identityKey;
 		activeLinkKey = identityKey;
@@ -134,6 +152,7 @@
 			linkUrl = '';
 			linkLoading = false;
 			linkError = undefined;
+
 			return () => {
 				if (ownGeneration === linkGeneration) linkGeneration += 1;
 				controller.abort();
@@ -169,7 +188,9 @@
 								expiresAt: null
 							}
 						: await getContentLink(auth, id, version, controller.signal);
+
 				controller.signal.throwIfAborted();
+
 				if (
 					ownGeneration !== linkGeneration ||
 					refreshIteration !== linkRefresh
@@ -178,6 +199,7 @@
 				}
 
 				const resolvedUrl = new URL(result.url);
+
 				if (
 					file.kind !== 'site' &&
 					(file.contentType === 'application/pdf' ||
@@ -185,10 +207,13 @@
 				) {
 					resolvedUrl.searchParams.set('preview', 'dashboard');
 				}
+
 				linkUrl = resolvedUrl.href;
 				linkLoading = false;
+
 				if (result.expiresAt) {
 					const expiresAt = new Date(result.expiresAt).getTime();
+
 					if (Number.isFinite(expiresAt)) {
 						scheduleRefresh(Math.max(1_000, expiresAt - Date.now() - 60_000));
 					}
@@ -201,11 +226,13 @@
 				) {
 					return;
 				}
+
 				linkError =
 					cause instanceof Error
 						? cause
 						: new Error('Could not load the file preview');
 				linkLoading = false;
+
 				if (linkUrl) scheduleRefresh(30_000);
 			}
 		})();
@@ -213,6 +240,7 @@
 		return () => {
 			if (ownGeneration === linkGeneration) linkGeneration += 1;
 			controller.abort();
+
 			if (timer !== undefined) clearTimeout(timer);
 		};
 	});
@@ -224,26 +252,37 @@
 	let markdownError = $state<Error>();
 	let markdownRetry = $state(0);
 	let markdownNode = $state<HTMLElement>();
+
 	const retry = () => {
 		if (preview.error) void preview.refetch();
+
 		if (linkError) linkRefresh += 1;
+
 		if (markdownError) markdownRetry += 1;
 	};
+
 	const attachMarkdownPreview: Attachment<HTMLElement> = (node) => {
 		markdownNode = node;
+
 		return () => {
 			if (markdownNode === node) markdownNode = undefined;
 		};
 	};
+
 	$effect(() => {
 		void markdownRetry;
+
 		const source =
 			preview.current?.kind === 'markdown' ? preview.current.text : '';
+
 		markdownError = undefined;
+
 		if (!source) {
 			renderedMarkdown = '';
+
 			return;
 		}
+
 		let cancelled = false;
 		void import('$lib/dashboard/markdown')
 			.then(({ renderMarkdown }) => {
@@ -256,12 +295,15 @@
 						? cause
 						: new Error('Could not load the markdown preview');
 			});
+
 		return () => {
 			cancelled = true;
 		};
 	});
+
 	$effect(() => {
 		const node = markdownNode;
+
 		if (node) node.innerHTML = renderedMarkdown;
 	});
 </script>

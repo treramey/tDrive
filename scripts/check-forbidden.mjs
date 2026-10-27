@@ -2,11 +2,13 @@ import { readFile, readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
 const roots = ['apps', 'packages'];
+
 const forbidden = [
 	{ label: 'D1 transactions', pattern: '.withTransaction(' },
 	{ label: 'D1 query streams', pattern: '.stream(' },
 	{ label: 'unsafe FTS maintenance', pattern: "'integrity-check'" }
 ];
+
 const violations = [];
 
 // Only first-party sources: build output bundles third-party code whose
@@ -22,6 +24,7 @@ const skippedDirectories = new Set([
 const visit = async (directory) => {
 	for (const entry of await readdir(directory, { withFileTypes: true })) {
 		const path = join(directory, entry.name);
+
 		if (entry.isDirectory()) {
 			if (skippedDirectories.has(entry.name)) continue;
 			await visit(path);
@@ -29,6 +32,7 @@ const visit = async (directory) => {
 			['.mjs', '.sql', '.svelte', '.ts'].includes(extname(entry.name))
 		) {
 			const source = await readFile(path, 'utf8');
+
 			for (const rule of forbidden) {
 				if (source.includes(rule.pattern)) {
 					violations.push(`${path}: forbidden ${rule.label} (${rule.pattern})`);

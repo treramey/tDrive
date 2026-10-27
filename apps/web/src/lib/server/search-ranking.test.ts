@@ -40,6 +40,7 @@ describe('reciprocal rank fusion', () => {
 				weight: 0.5
 			}
 		});
+
 		expect(result[0]?.fileId).toBe('both');
 		expect(result.find((item) => item.fileId === 'keyword')?.score).toBeCloseTo(
 			1 / 61
@@ -61,6 +62,7 @@ describe('reciprocal rank fusion', () => {
 				weight: 1
 			}
 		});
+
 		expect(result.map((row) => row.fileId)).toEqual([
 			'shared',
 			'keyword',
@@ -77,6 +79,7 @@ describe('reciprocal rank fusion', () => {
 			})),
 			weight: 1
 		};
+
 		expect(reciprocalRankFusion({ keyword }, 55)).toHaveLength(55);
 	});
 
@@ -87,6 +90,7 @@ describe('reciprocal rank fusion', () => {
 			})),
 			weight: 1
 		};
+
 		const fused = reciprocalRankFusion({ keyword }, 200);
 		const page0 = fused.slice(0, 50).map((entry) => entry.fileId);
 		const page1 = fused.slice(50, 100).map((entry) => entry.fileId);
@@ -103,6 +107,7 @@ describe('reciprocal rank fusion', () => {
 			},
 			trigram: { results: [{ fileId: 'second' }], weight: 0.5 }
 		};
+
 		expect(
 			reciprocalRankFusion({
 				...sources,

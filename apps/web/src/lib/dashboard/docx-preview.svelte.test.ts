@@ -14,6 +14,7 @@ import {
 } from '$lib/file-preview';
 
 const workers: PreviewWorker[] = [];
+
 class PreviewWorker {
 	onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
 	onerror: (() => void) | null = null;
@@ -29,6 +30,7 @@ class PreviewWorker {
 }
 
 const fetchMock = vi.fn<typeof fetch>();
+
 const file: DashboardFile = {
 	id: 'docx-private',
 	version: 2,
@@ -50,7 +52,9 @@ const file: DashboardFile = {
 	htmlForcedPublic: false,
 	updatedAt: '2026-01-01T00:00:00.000Z'
 };
+
 const mounted: ReturnType<typeof mount>[] = [];
+
 const mountPreview = () => {
 	const target = document.createElement('div');
 	document.body.appendChild(target);
@@ -61,12 +65,16 @@ const mountPreview = () => {
 			props: { file, token: 'private-token', ondownload }
 		})
 	);
+
 	return { target, ondownload };
 };
+
 const nextWorker = async (index = 0) => {
 	await vi.waitFor(() => expect(workers.length).toBe(index + 1));
 	const worker = workers[index];
+
 	if (!worker) throw new Error('Missing worker');
+
 	return worker;
 };
 
@@ -83,6 +91,7 @@ beforeEach(() => {
 		)
 	);
 });
+
 afterEach(async () => {
 	for (const component of mounted.splice(0)) await unmount(component);
 	document.body.replaceChildren();
@@ -247,6 +256,7 @@ describe('DOCX detail preview', () => {
 		const worker = await nextWorker();
 		const lateMessage = worker.onmessage;
 		const component = mounted.pop();
+
 		if (!component) throw new Error('Missing component');
 		await unmount(component);
 		await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalledOnce());
@@ -263,22 +273,27 @@ describe('DOCX detail preview', () => {
 	it('clears content and cancels conversion when the file identity changes', async () => {
 		let current = file;
 		let update = () => {};
+
 		const subscribe = createSubscriber((notify) => {
 			update = notify;
 		});
+
 		const target = document.createElement('div');
 		document.body.appendChild(target);
+
 		const component = mount(DocxPreview, {
 			target,
 			props: {
 				get file() {
 					subscribe();
+
 					return current;
 				},
 				token: 'private-token',
 				ondownload: () => {}
 			}
 		});
+
 		mounted.push(component);
 		const first = await nextWorker();
 		first.complete({
@@ -369,12 +384,14 @@ describe('DOCX attempt admission and cancellation', () => {
 				})
 		);
 		const controller = new AbortController();
+
 		const pending = loadDocxPreview({
 			token: 'token',
 			id: 'pending-input',
 			version: 1,
 			signal: controller.signal
 		});
+
 		const assertion = expect(pending).rejects.toThrow();
 		await tick();
 		controller.abort();
@@ -387,9 +404,11 @@ describe('DOCX attempt admission and cancellation', () => {
 	it('terminates hung conversion after the conversion timeout', async () => {
 		vi.useFakeTimers();
 		const pending = load();
+
 		const assertion = expect(pending).rejects.toThrow(
 			'This document could not be previewed'
 		);
+
 		await vi.advanceTimersByTimeAsync(0);
 		expect(workers).toHaveLength(1);
 		await vi.advanceTimersByTimeAsync(docxConversionTimeoutMs);

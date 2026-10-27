@@ -26,33 +26,41 @@ const walkSite = (directory: string) =>
 		try: async () => {
 			const root = await realpath(directory);
 			const rootStat = await lstat(root);
+
 			if (!rootStat.isDirectory()) {
 				throw new Error('The site path must be a directory');
 			}
+
 			const assets: Array<LocalSiteAsset> = [];
 
 			const walk = async (current: string): Promise<void> => {
 				const entries = await readdir(current, { withFileTypes: true });
 				entries.sort((left, right) => left.name.localeCompare(right.name));
+
 				for (const entry of entries) {
 					const file = join(current, entry.name);
 					const stat = await lstat(file);
+
 					if (stat.isSymbolicLink()) {
 						throw new Error(
 							`Site directories cannot contain symlinks: ${file}`
 						);
 					}
+
 					if (stat.isDirectory()) {
 						await walk(file);
 						continue;
 					}
+
 					if (!stat.isFile()) {
 						throw new Error(
 							`Site directories can contain only regular files: ${file}`
 						);
 					}
+
 					const resolved = await realpath(file);
 					const localPath = relative(root, resolved);
+
 					if (
 						localPath === '..' ||
 						localPath.startsWith(`..${sep}`) ||
@@ -62,6 +70,7 @@ const walkSite = (directory: string) =>
 							`Site asset escaped the selected directory: ${file}`
 						);
 					}
+
 					const path = normalizeSitePath(localPath.split(sep).join('/'));
 					assets.push({
 						file: resolved,
@@ -73,6 +82,7 @@ const walkSite = (directory: string) =>
 			};
 
 			await walk(root);
+
 			return { root, assets };
 		},
 		catch: (cause) =>
@@ -92,7 +102,9 @@ const uploadSiteAsset = (
 		const body = yield* HttpBody.file(asset.file, {
 			contentType: asset.contentType
 		});
+
 		const params = new URLSearchParams({ path: asset.path });
+
 		const response = yield* client
 			.execute(
 				apiRequest(
@@ -103,6 +115,7 @@ const uploadSiteAsset = (
 				)
 			)
 			.pipe(Effect.flatMap(ensureOk));
+
 		yield* decodeBody(SiteAssetResponseSchema, response);
 	});
 
@@ -125,15 +138,17 @@ export const sitePut = Command.make(
 			const client = yield* HttpClient.HttpClient;
 			const walked = yield* walkSite(directory);
 			const displayName = Option.getOrElse(name, () => basename(walked.root));
+
 			const manifest = {
 				displayName: displayName || 'site',
-				...(Option.isSome(id) ? { fileId: id.value } : {}),
+				fileId: Option.getOrUndefined(id),
 				assets: walked.assets.map(({ path, sizeBytes, contentType }) => ({
 					path,
 					sizeBytes,
 					contentType
 				}))
 			};
+
 			const createResponse = yield* client
 				.execute(
 					apiRequest(
@@ -144,15 +159,18 @@ export const sitePut = Command.make(
 					)
 				)
 				.pipe(Effect.flatMap(ensureOk));
+
 			const session = yield* decodeBody(
 				SiteSessionResponseSchema,
 				createResponse
 			);
+
 			const uploadAssets = Effect.forEach(
 				walked.assets,
 				(asset) => uploadSiteAsset(client, config, session.sessionId, asset),
 				{ concurrency: 4, discard: true }
 			);
+
 			yield* uploadAssets.pipe(
 				Effect.catch((failure) =>
 					client
@@ -170,6 +188,7 @@ export const sitePut = Command.make(
 						)
 				)
 			);
+
 			const commitResponse = yield* client
 				.execute(
 					apiRequest(
@@ -179,10 +198,12 @@ export const sitePut = Command.make(
 					)
 				)
 				.pipe(Effect.flatMap(ensureOk));
+
 			const result = yield* decodeBody(
 				SiteCommitResponseSchema,
 				commitResponse
 			);
+
 			if (wantsJson()) {
 				yield* emit(result);
 			} else {

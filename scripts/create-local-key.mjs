@@ -8,6 +8,7 @@ const token = `adr_${prefix}_${secret}`;
 const hash = createHash('sha256').update(token).digest('hex');
 const id = randomUUID();
 const createdAt = new Date().toISOString();
+
 const sql = [
 	'INSERT INTO api_keys (id, name, prefix, secret_hash, created_at)',
 	`VALUES ('${id}', 'local development', '${prefix}', '${hash}', '${createdAt}')`

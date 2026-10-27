@@ -6,23 +6,23 @@ import type { Toasts } from './toast.svelte';
 import { resource } from 'runed';
 import { untrack } from 'svelte';
 
+type FileListApi = Pick<typeof import('./api'), 'listFiles' | 'searchFiles'>;
+
 const fetchListing = (
+	api: FileListApi,
 	mode: ListingMode,
 	token: string,
 	signal?: AbortSignal,
 	cursor?: string
 ) =>
 	mode.kind === 'list'
-		? listFiles(token, mode.trashed, signal, cursor)
-		: searchFiles(token, mode.query, [...mode.tags], signal, cursor);
+		? api.listFiles(token, mode.trashed, signal, cursor)
+		: api.searchFiles(token, mode.query, [...mode.tags], signal, cursor);
 
-const matchListing = (mode: ListingMode, token: string, signal?: AbortSignal) =>
-	fetchListing(mode, token, signal);
-
-const emptyList = {
-	files: [] as ReadonlyArray<DashboardFile>,
+const emptyList: FileListPayload = {
+	files: [],
 	nextCursor: null,
-	tags: [] as ReadonlyArray<never>,
+	tags: [],
 	contentOrigin: '',
 	maxUploadBytes: 0,
 	semantic: {
@@ -35,6 +35,7 @@ const emptyList = {
 };
 
 type FileListDeps = {
+	readonly api?: FileListApi;
 	readonly session: {
 		readonly ready: boolean;
 		readonly token: string;
@@ -56,10 +57,12 @@ export const createFileList = ({
 	trashed,
 	sort,
 	initialList = null,
-	initialError = ''
+	initialError = '',
+	api = { listFiles, searchFiles }
 }: FileListDeps) => {
 	const ssrList = untrack(() => initialList);
 	let hydratedFromServer = false;
+
 	// The mode that produced the current listing, so "load more" follows the
 	// same route (list vs search) instead of always paging the plain list.
 	let lastMode = $state<ListingMode | null>(
@@ -67,6 +70,7 @@ export const createFileList = ({
 			? listingMode(trashed() ? 'trash' : null, query(), [...tags()])
 			: null
 	);
+
 	const list = resource(
 		() =>
 			[session.ready, session.token, trashed(), query(), [...tags()]] as const,
@@ -76,6 +80,7 @@ export const createFileList = ({
 			{ signal }
 		) => {
 			if (!ready || !token) return emptyList;
+
 			// The page was already rendered server-side with this exact listing
 			// (query/trash/tags come from the same URL in both renderers). Skip
 			// the duplicate fetch so a dashboard visit costs one API call, not
@@ -84,12 +89,15 @@ export const createFileList = ({
 			if (ssrList && !hydratedFromServer) {
 				hydratedFromServer = true;
 				lastMode = listingMode(isTrashed ? 'trash' : null, value, selectedTags);
+
 				return ssrList;
 			}
+
 			const mode = listingMode(isTrashed ? 'trash' : null, value, selectedTags);
-			const payload = await matchListing(mode, token, signal);
+			const payload = await fetchListing(api, mode, token, signal);
 			signal.throwIfAborted();
 			lastMode = mode;
+
 			return payload;
 		},
 		{
@@ -99,16 +107,21 @@ export const createFileList = ({
 			initialValue: ssrList ?? emptyList
 		}
 	);
+
 	let serverLoadError = $state(untrack(() => initialError));
 	const listError = $derived(list.error?.message ?? serverLoadError);
+
 	const matchesView = $derived(
 		lastMode !== null &&
 			(lastMode.kind === 'search' ? !trashed() : lastMode.trashed === trashed())
 	);
+
 	const currentFiles = $derived(matchesView ? list.current.files : []);
+
 	const initialListLoading = $derived(
 		(!list.current.contentOrigin || !matchesView) && !listError
 	);
+
 	let loadingMore = $state(false);
 
 	$effect(() => {
@@ -118,17 +131,22 @@ export const createFileList = ({
 	const loadMore = async (showTrash: boolean) => {
 		const token = session.token;
 		const cursor = list.current.nextCursor;
+
 		if (!token || !cursor || loadingMore) return;
 		loadingMore = true;
+
 		try {
 			const mode: ListingMode = lastMode ?? {
 				kind: 'list',
 				trashed: showTrash
 			};
-			const next = await fetchListing(mode, token, undefined, cursor);
+
+			const next = await fetchListing(api, mode, token, undefined, cursor);
+
 			if (session.token !== token || list.current.nextCursor !== cursor) {
 				return;
 			}
+
 			const seen = new Set(list.current.files.map((file) => file.id));
 			list.mutate({
 				...next,
@@ -152,7 +170,9 @@ export const createFileList = ({
 		const value = query().trim().toLowerCase();
 		const selectedTags = [...tags()];
 		const showTrash = trashed();
+
 		if (!showTrash && value) return currentFiles;
+
 		const filtered = showTrash
 			? currentFiles.filter(
 					(file) =>
@@ -165,10 +185,13 @@ export const createFileList = ({
 							file.tags.some((tag) => selectedTags.includes(tag.id)))
 				)
 			: currentFiles;
+
 		return [...filtered].sort((left, right) => {
 			if (sort() === 'name')
 				return left.displayName.localeCompare(right.displayName);
+
 			if (sort() === 'size') return right.sizeBytes - left.sizeBytes;
+
 			return right.updatedAt.localeCompare(left.updatedAt);
 		});
 	});
@@ -209,8 +232,10 @@ export const resolveFileLink = async (
 ) => {
 	if (file.public && !isUnavailable(file)) {
 		const path = file.kind === 'site' ? `s/${file.id}/` : `f/${file.id}`;
+
 		return `${contentOrigin}/${path}`;
 	}
+
 	const link = await getContentLink(
 		token,
 		file.id,
@@ -218,6 +243,7 @@ export const resolveFileLink = async (
 		undefined,
 		isUnavailable(file)
 	);
+
 	return link.url;
 };
 
@@ -225,6 +251,7 @@ const isUnavailable = (file: DashboardFile) => {
 	const expirationTime = file.expiresAt
 		? new Date(file.expiresAt).getTime()
 		: Number.NaN;
+
 	return (
 		file.deletedAt !== null ||
 		(Number.isFinite(expirationTime) && expirationTime <= Date.now())

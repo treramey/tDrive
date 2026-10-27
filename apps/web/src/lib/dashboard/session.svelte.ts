@@ -43,6 +43,7 @@ export class DashboardSession {
 	async connect(value: string) {
 		this.connecting = true;
 		this.error = '';
+
 		try {
 			await loginWithPasscode(value.trim());
 			await this.adoptBrowserSession();
@@ -51,6 +52,7 @@ export class DashboardSession {
 				cause instanceof Error
 					? cause.message
 					: 'Could not verify the passcode';
+
 			this.error =
 				location.protocol === 'http:' && location.hostname !== 'localhost'
 					? `${message}. This plain-HTTP origin cannot keep the secure session cookie; sign in with an API key instead.`
@@ -70,6 +72,7 @@ export class DashboardSession {
 		if (this.connecting) return;
 		this.connecting = true;
 		this.error = '';
+
 		try {
 			await signInWithPasskey(signal);
 			await this.adoptBrowserSession();
@@ -91,6 +94,7 @@ export class DashboardSession {
 		const next = value.trim();
 		this.connecting = true;
 		this.error = '';
+
 		try {
 			await checkKey(next);
 			saveKey(next);
@@ -107,14 +111,17 @@ export class DashboardSession {
 		if (this.connecting || !this.token) return false;
 		this.connecting = true;
 		this.error = '';
+
 		try {
 			if (this.token === BROWSER_SESSION) await logoutSession();
 			saveKey('');
 			this.token = '';
+
 			return true;
 		} catch (cause) {
 			this.error =
 				cause instanceof Error ? cause.message : 'Could not sign out';
+
 			return false;
 		} finally {
 			this.connecting = false;
@@ -125,14 +132,17 @@ export class DashboardSession {
 		if (this.ready) return;
 		this.error = '';
 		const savedKey = readSavedKey();
+
 		try {
 			if (savedKey) {
 				try {
 					await checkKey(savedKey);
 					this.token = savedKey;
+
 					return;
 				} catch (cause) {
 					saveKey('');
+
 					if (!(cause instanceof ApiError && cause.status === 401)) {
 						this.error =
 							cause instanceof Error
@@ -141,12 +151,14 @@ export class DashboardSession {
 					}
 				}
 			}
+
 			try {
 				await checkKey(BROWSER_SESSION);
 				this.token = BROWSER_SESSION;
 				this.error = '';
 			} catch (cause) {
 				this.token = '';
+
 				if (!(cause instanceof ApiError && cause.status === 401)) {
 					this.error =
 						cause instanceof Error

@@ -4,13 +4,20 @@
 
 tdrive uses Bun workspace scripts and Vite for SvelteKit. Use [test commands](testing.md#target-commands)
 for current commands: `bun format:check`, `bun check`, `bun run test`, and workspace scripts.
+`bun check` runs the workspace typechecks and repository checks, then `vp check`
+for Oxfmt formatting and Oxlint linting through Vite+. Run `bun format` to format,
+`bun format:check` to check formatting, or `bun lint` to lint separately. Their
+shared settings live in the root `vite.config.ts`, including the vendored
+anti-slop and Effect rules in `tools/oxlint/anti-slop/`. Their source provenance
+is recorded in `tools/oxlint/anti-slop/UPSTREAM.md`.
+
 Infrastructure lifecycle ordering is owned by `scripts/release.sh`; commands that mutate
 external state must actually execute rather than be skipped by a cache.
 
 ## Upstream task-runner reference
 
 The complete task-graph and cache-policy guidance below is retained as reference.
-Vite+ commands and Alchemy tasks are not installed tdrive commands.
+The task graph commands and Alchemy tasks below are not configured tdrive commands.
 
 Vite+ owns repository checks and workspace task execution. The root `vite.config.ts` contains shared formatting, linting, type-checking, and Vite Task defaults; workspace `vite.config.ts` files own package-specific task graphs.
 

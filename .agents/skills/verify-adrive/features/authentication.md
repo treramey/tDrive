@@ -14,7 +14,7 @@ Users sign into the drive with a passcode or API key, manage scoped keys in Sett
 - Open `/`, fill `Passcode`, choose `Sign in`.
 - Expand `Sign in with an API key`, fill `API key`, choose `Connect`.
 - Choose `Settings` in account navigation, then `API keys`; choose `Sign out` in account navigation.
-- Run `bun adrive login http://localhost:5173 --headless`, open the printed approval URL, and approve it.
+- Run `bun tdrive login http://localhost:5173 --headless`, open the printed approval URL, and approve it.
 
 ## Driving it with browser/CLI/HTTP
 
@@ -27,7 +27,7 @@ Preconditions:
 - **Bad passcode.** In a fresh context submit one wrong passcode; expect a visible error and no signed-in controls. Stop after one attempt; this is not a lockout load test.
 - **Keys.** In Settings, fill placeholder `Key name, e.g. backup agent` with `verify-reader`, select `Key scope` value `read-only`, choose `Create key`. Retain its token only in a mode-0600 scratch file in runtime; pause recording while it is visible. A Bearer GET `/api/files` must succeed while PUT `/api/files` and GET `/api/auth/keys` return 403. Create a read-write key and prove a small upload succeeds. Revoke each created key using its row's `Revoke`, then `Revoke key` in the confirmation dialog. A subsequent Bearer GET must return 401. Save sanitized statuses, never tokens.
 - **API fallback.** Sign out, expand `Sign in with an API key`, enter the disposable write key before revoking it, and choose `Connect`. Expect the listing and reopen a file. This branch does not prove passcode cookies.
-- **Device login.** From `$RUN/runtime`, run `XDG_CONFIG_HOME="$RUN/runtime/device-config" bun adrive login http://localhost:5173 --headless` in its own PTY. Open the exact printed approval URL in a signed-in context, choose the approval control shown in a fresh snapshot, and wait for CLI exit 0. Then run `XDG_CONFIG_HOME="$RUN/runtime/device-config" bun adrive --json whoami`; expect an authenticated identity. Confirm `device-config/adrive/config.json` exists at mode 0600 without printing it. Capture a redacted PTY transcript; approval URLs carry device credentials.
+- **Device login.** From `$RUN/runtime`, run `XDG_CONFIG_HOME="$RUN/runtime/device-config" bun tdrive login http://localhost:5173 --headless` in its own PTY. Open the exact printed approval URL in a signed-in context, choose `Approve device` shown in a fresh snapshot, and wait for CLI exit 0. Then run `XDG_CONFIG_HOME="$RUN/runtime/device-config" bun tdrive --json whoami`; expect an authenticated identity. Confirm `device-config/tdrive/config.json` exists at mode 0600 without printing it. Capture a redacted PTY transcript; approval URLs carry device credentials.
 
 ## Gotchas
 

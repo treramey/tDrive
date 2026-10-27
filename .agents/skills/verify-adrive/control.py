@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Disposable local a-drive runtime; proof artifacts outlive cleanup."""
+"""Disposable local tdrive runtime; proof artifacts outlive cleanup."""
 
 import argparse
 import hashlib
@@ -43,7 +43,7 @@ def request(path, method="GET", body=None, headers=None, origin=ORIGIN):
 
 
 def api(run, path):
-    config = json.loads((run / "runtime/.verify-config/adrive/config.json").read_text())
+    config = json.loads((run / "runtime/.verify-config/tdrive/config.json").read_text())
     return request(path, headers={"Authorization": "Bearer " + config["apiKey"]})
 
 
@@ -92,6 +92,7 @@ def launch(run):
         raise RuntimeError("Runtime already exists; cleanup and use a new run")
     for port in (5173, 5174):
         with socket.socket() as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind(("0.0.0.0", port))
     runtime = run / "runtime"
     runtime.mkdir(mode=0o700)
@@ -121,7 +122,7 @@ def launch(run):
                 log.flush()
                 subprocess.run(command, cwd=runtime, stdout=log, stderr=log, check=True)
         with (run / "evidence/server.log").open("w") as log:
-            process = subprocess.Popen(["bun", "--filter", "@adrive/web", "dev"],
+            process = subprocess.Popen(["bun", "--filter", "@tdrive/web", "dev"],
                                        cwd=runtime, stdout=log, stderr=log,
                                        start_new_session=True)
         info = {"pid": process.pid, "start_ticks": process_identity(process.pid),
@@ -150,7 +151,7 @@ def launch(run):
             json.dumps({"name": "verification-fixture", "scope": "read-write"}).encode(),
             {"Origin": ORIGIN, "Content-Type": "application/json", "Cookie": cookie})
         assert status == 201, f"Fixture key creation failed: {status}"
-        config_dir = runtime / ".verify-config/adrive"
+        config_dir = runtime / ".verify-config/tdrive"
         config_dir.mkdir(parents=True, mode=0o700)
         config = config_dir / "config.json"
         write_json(config, {"endpoint": ORIGIN, "contentOrigin": "http://localhost:5174",
@@ -217,7 +218,9 @@ def main():
         check_owner(state(run))
         command = args.args[1:] if args.args[:1] == ["--"] else args.args
         env = {**os.environ, "XDG_CONFIG_HOME": str(run / "runtime/.verify-config")}
-        sys.exit(subprocess.run(["bun", "adrive", *command], cwd=run / "runtime", env=env).returncode)
+        sys.exit(subprocess.run(
+            ["node", "--experimental-strip-types", "src/main.ts", *command],
+            cwd=run / "runtime/packages/cli", env=env).returncode)
     else:
         doctor(run)
         if len(args.args) != 2 or not args.args[0].startswith("/api/"):

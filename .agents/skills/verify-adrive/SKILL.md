@@ -1,11 +1,11 @@
 ---
 name: verify-adrive
-description: Drive a-drive's local web dashboard, CLI, and HTTP/content origins with disposable D1/R2/KV state. Use after user-facing changes to authentication, uploads, file management, search/tags, or site publishing; capture proof and preserve it after cleanup.
+description: Drive tdrive's local web dashboard, CLI, and HTTP/content origins with disposable D1/R2/KV state. Use after user-facing changes to authentication, uploads, file management, search/tags, or site publishing; capture proof and preserve it after cleanup.
 ---
 
-# Verify a-drive locally
+# Verify tdrive locally
 
-Read [features/README.md](features/README.md) first, then the matching feature recipe. The dashboard is the primary surface; `bun adrive`, `/api/*`, and `/mcp` are additional user surfaces. This skill covers the first three; MCP needs a separate protocol journey. For real Cloudflare deployments use [verify-deployment](../verify-deployment/SKILL.md).
+Read [features/README.md](features/README.md) first, then the matching feature recipe. The dashboard is the primary surface; `bun tdrive`, `/api/*`, and `/mcp` are additional user surfaces. This skill covers the first three; MCP needs a separate protocol journey. For real Cloudflare deployments use [verify-deployment](../verify-deployment/SKILL.md).
 
 ## Launch
 
@@ -18,7 +18,7 @@ printf '%s\n' "$RUN"  # retain this absolute path across shell tool calls
 "$CONTROL" launch "$RUN"
 ```
 
-`new` creates `$HOME/.local/state/adrive-verification/<UUID>/evidence/inputs/` with `verify-note.txt`, distinct `replacement.txt`, and `site/index.html`. No files are uploaded yet. `launch` copies the checkout's current tracked/unignored app, packages, scripts, and root files into `$RUN/runtime`; ignored local credentials, dependencies, build output, and storage are excluded. It installs with `bun install --frozen-lockfile`, applies **all** `bun db:migrate:local` migrations to empty storage, writes local-only `.dev.vars`, and starts the documented `bun --filter @adrive/web dev` command in an owned process group. It creates one read-write CLI fixture key through the real authentication API and stores it at mode 0600 in the runtime's isolated XDG config. This setup is a fixture, not proof of browser or device authentication.
+`new` creates `$HOME/.local/state/adrive-verification/<UUID>/evidence/inputs/` with `verify-note.txt`, distinct `replacement.txt`, and `site/index.html`. No files are uploaded yet. `launch` copies the checkout's current tracked/unignored app, packages, scripts, and root files into `$RUN/runtime`; ignored local credentials, dependencies, build output, and storage are excluded. It installs with `bun install --frozen-lockfile`, applies **all** `bun db:migrate:local` migrations to empty storage, writes local-only `.dev.vars`, and starts the documented `bun --filter @tdrive/web dev` command in an owned process group. It creates one read-write CLI fixture key through the real authentication API and stores it at mode 0600 in the runtime's isolated XDG config. This setup is a fixture, not proof of browser or device authentication.
 
 Readiness is `doctor` reporting PASS: authenticated `/api/files` reads work against the migrated database, unauthenticated reads return 401, content-host API requests return 421, and both listening ports belong to our process group. A Vite ready log alone is insufficient. Setup and server logs are in `$RUN/evidence/`. A failed launch invokes cleanup automatically; still run cleanup after any later failure.
 
@@ -38,7 +38,7 @@ This read-only check verifies recorded PID start ticks, ownership of both ports,
 
 Use the real browser controls, never internal Svelte state setters or JS-created fake uploads. In T3 Code call `preview_status`, then `preview_open` with `url: "http://localhost:5173"`, `profileId: "incognito"`, and `reuseExistingTab: false`. Keep the returned `tabId` for every call. Use `preview_snapshot` for fresh ARIA refs and `preview_act` with `locator: "aria-ref=<fresh ref>"`; stale refs must be refreshed. Use `preview_wait_for` for observed states. Upload a fixture using `preview_act` action `upload`, selector `input[type=file][multiple]`, paths containing the absolute `$RUN/evidence/inputs/verify-note.txt`. Never submit an API upload as evidence for the browser upload journey.
 
-Start `preview_recording_start` before the action, and stop with `preview_recording_stop` after the resulting state; copy its returned local file into `$RUN/evidence/`. Save `preview_snapshot` with `save: true`, copy its PNG into evidence, and save its accessibility tree as a text file. Record sanitized action steps as well. If recording is unsupported, retain before/after screenshots and the action transcript and report the missing video. Stop recordings and close your tab with `t3_preview_close` before teardown. If preview automation is absent or reports unsupported, record the exact error and use Playwright in a fresh browser context as a fallback. Save its trace, screenshots, and actions in the same evidence directory; never silently substitute HTTP for UI coverage.
+Start `preview_recording_start` before the action, and stop with `preview_recording_stop` after the resulting state; copy its returned local file into `$RUN/evidence/`. Save `preview_snapshot` with `save: true`, copy its PNG into evidence, and save its accessibility tree as a text file. Record sanitized action steps as well. If recording is unsupported, retain before/after screenshots and the action transcript and report the missing video. Stop recordings and close your tab with `t3_preview_close` before teardown. If preview automation is absent or reports unsupported, record the exact error and use Playwright in a fresh browser context as a fallback. Save video, screenshots, and sanitized actions in the same evidence directory; retain a trace only after removing credentials; never silently substitute HTTP for UI coverage.
 
 CLI invocations use the real source CLI, in their own process with isolated configuration:
 
@@ -58,6 +58,14 @@ Read-only HTTP cross-checks use the CLI fixture key without printing it:
 ```
 
 The last argument is an evidence basename; each command writes `<basename>.json` and prints method/path/status/body SHA-256. A non-200 status fails. For file detail use `/api/files/FILE_ID`; for search use `/api/search?q=orchid`. These are actual public API routes, not test-only endpoints. Public content can be read with `curl -fsS http://localhost:5174/f/FILE_ID -o "$RUN/evidence/download.txt"`; compare to the input with `sha256sum` and `cmp`. Private signed links are credentials: sanitize them in evidence.
+
+The executable Docker fallback proves `transfer-browser` without host browser libraries:
+
+```bash
+"$(dirname "$CONTROL")/browser-proof.sh" "$RUN"
+```
+
+It requires a running Docker daemon and downloads the pinned Playwright 1.56.1 Ubuntu image plus its matching npm package into an ephemeral container. It uses host networking to reach the same localhost app, mounts only this skill read-only plus evidence read/write, runs as your UID, and removes the container on exit. It signs in through the UI, cancels an empty-state upload, uploads through the toolbar, reloads/reopens detail, checks metadata, and compares an anonymous content download. Video, ARIA, PNGs, sanitized actions, JSON metadata, and downloaded bytes survive in evidence. No raw network trace is retained because it would include session cookies. The container supplies Chromium and Linux libraries; the app still runs directly on this host. A native/shared-browser setup remains unverified when this fallback is used. After a failed proof run cleanup and launch a new run before retrying; an existing upload violates the empty-state precondition.
 
 ## Evidence
 
@@ -83,4 +91,4 @@ Cleanup signals only the recorded process group after verifying PID start ticks,
 
 ## Helpers
 
-[control.py](control.py) is executable. Its full interface is shown above: `new`, `launch RUN`, `doctor RUN`, `cli RUN -- ARGS...`, `http RUN /api/PATH BASENAME`, and `cleanup RUN`. `cli` forwards the command exit code and stdout/stderr; `http` only performs GET. Runtime failures retain logs. No helper directly changes application tables. No server is needed after cleanup to view the retained evidence.
+[control.py](control.py) is executable. Its full interface is shown above: `new`, `launch RUN`, `doctor RUN`, `cli RUN -- ARGS...`, `http RUN /api/PATH BASENAME`, and `cleanup RUN`. `cli` forwards the command exit code and stdout/stderr; `http` only performs GET. `browser-proof.sh RUN` calls the executable `browser-proof.cjs` inside the container; it is not a host Node command. Runtime failures retain logs. No helper directly changes application tables. No server is needed after cleanup to view the retained evidence.

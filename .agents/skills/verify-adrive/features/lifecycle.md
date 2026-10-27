@@ -11,7 +11,7 @@ Users rename files, replace or restore their contents while retaining history, a
 
 ## How to get to it (user POV)
 
-- Open a file in the listing; choose its name (`title="Rename file"`), or run `bun adrive rename ID NAME`.
+- Open a file in the listing; choose its name (`title="Rename file"`), or run `bun tdrive rename ID NAME`.
 - In detail choose `New version`; inspect `Versions`, row `Open`/`Download`, and older row `Restore`.
 - Use detail `Move to trash`/`Restore file`, listing `Actions for NAME`, or checkboxes `Select NAME` and the bulk action bar.
 - Choose `Trash`, then the row's `Delete permanently`, bulk deletion, or `Empty trash`.

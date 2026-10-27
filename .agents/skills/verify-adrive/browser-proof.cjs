@@ -153,7 +153,13 @@ async function main() {
 		} finally {
 			await anonymous.close();
 		}
+		const signedOut = page.waitForResponse(
+			(response) =>
+				response.url().endsWith('/api/auth/session') &&
+				response.request().method() === 'DELETE'
+		);
 		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+		assert.equal((await signedOut).status(), 204);
 		await page.goto('http://localhost:5173');
 		await page
 			.getByRole('heading', { name: 'Sign in to your drive', exact: true })

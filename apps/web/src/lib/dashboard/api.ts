@@ -232,6 +232,10 @@ export const getFilePreview = async (
 		{ signal }
 	);
 	const kind = response.headers.get('X-Adrive-Preview-Kind') ?? 'text';
+	if (kind !== 'text' && kind !== 'markdown') {
+		await response.body?.cancel();
+		throw new ApiError('Preview is not text', 415);
+	}
 	const text = await response.text();
 	if (cacheKey !== null && text.length <= MAX_PREVIEW_CACHE_BYTES) {
 		previewCache.set(cacheKey, { kind, text });

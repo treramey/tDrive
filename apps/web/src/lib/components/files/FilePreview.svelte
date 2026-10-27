@@ -1,8 +1,10 @@
 <script lang="ts">
 	import type { DashboardFile } from '@tdrive/shared';
+	import { previewKind } from '$lib/file-preview';
 	import { getContentLink, getFilePreview } from '$lib/dashboard/api';
 	import { formatBytes } from '$lib/dashboard/format';
 	import Button from '$lib/components/ui/Button.svelte';
+	import DocxPreview from './DocxPreview.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { resource } from 'runed';
 	import type { Attachment } from 'svelte/attachments';
@@ -22,11 +24,8 @@
 	const html = $derived(
 		file.kind === 'site' || file.contentType.startsWith('text/html')
 	);
-	const textLike = $derived(
-		!html &&
-			(file.contentType.startsWith('text/') ||
-				/(json|javascript|typescript|xml|yaml|csv)/i.test(file.contentType))
-	);
+	const kind = $derived(previewKind(file.displayName, file.contentType));
+	const textLike = $derived(!html && (kind === 'text' || kind === 'markdown'));
 	const media = $derived(
 		html ||
 			file.contentType.startsWith('image/') ||
@@ -284,7 +283,9 @@
 			This file has expired. Its preview remains available until purge.
 		</div>
 	{/if}
-	{#if preview.loading || (linkLoading && !linkUrl)}
+	{#if kind === 'docx' && !html}
+		<DocxPreview {file} {token} {ondownload} />
+	{:else if preview.loading || (linkLoading && !linkUrl)}
 		<div class="animate-pulse space-y-4 p-8">
 			<div class="h-8 w-2/3 rounded bg-zinc-100"></div>
 			<div class="h-4 w-full rounded bg-zinc-100"></div>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DashboardFile } from '@tdrive/shared';
+	import { previewKind } from '$lib/file-preview';
 	import { getContentLink, getFilePreview } from '$lib/dashboard/api';
 	import {
 		dashboardThumbnailUrl,
@@ -34,10 +35,9 @@
 	const rendered = $derived(
 		supportsRenderedDashboardThumbnail(file.kind, file.contentType)
 	);
+	const kind = $derived(previewKind(file.displayName, file.contentType));
 	const textLike = $derived(
-		!rendered &&
-			(file.contentType.startsWith('text/') ||
-				/(json|javascript|typescript|xml|yaml|csv)/i.test(file.contentType))
+		!rendered && (kind === 'text' || kind === 'markdown')
 	);
 	let visible = $state(false);
 	let loadedSource = $state('');

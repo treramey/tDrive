@@ -53,7 +53,11 @@ const errorMessage = async (response: Response) => {
 	return fallback;
 };
 
-const request = async (path: string, token: string, init?: RequestInit) => {
+export const request = async (
+	path: string,
+	token: string,
+	init?: RequestInit
+) => {
 	const headers = new Headers(init?.headers);
 	if (token !== BROWSER_SESSION) {
 		headers.set('Authorization', `Bearer ${token}`);

@@ -378,3 +378,28 @@ export const ErrorResponseSchema = Schema.Struct({
 });
 
 export const API_KEY_PATTERN = /^adr_([A-Za-z0-9]{8})_([A-Za-z0-9_-]{24,})$/;
+
+export const PasskeyIdSchema = Schema.String.check(
+	Schema.isPattern(/^[A-Za-z0-9_-]{1,1400}$/)
+);
+
+export const PasskeySchema = Schema.Struct({
+	id: PasskeyIdSchema,
+	name: Schema.String,
+	createdAt: Schema.String,
+	lastUsedAt: Schema.NullOr(Schema.String),
+	deviceType: Schema.Literals(['singleDevice', 'multiDevice']),
+	backedUp: Schema.Boolean,
+	currentSession: Schema.Boolean
+});
+export type Passkey = typeof PasskeySchema.Type;
+export const PasskeyListResponseSchema = Schema.Struct({
+	passkeys: Schema.Array(PasskeySchema)
+});
+export const PasskeyEnrollSchema = Schema.Struct({
+	name: Schema.String,
+	passcode: Schema.String
+});
+export const PasskeyRemovalResponseSchema = Schema.Struct({
+	signedOut: Schema.Boolean
+});

@@ -90,10 +90,26 @@ dev URLs (like a Tailscale hostname). Use the generated API key in the
 dashboard's “Local HTTP fallback” there. Passcode login works on
 `http://localhost` and on any HTTPS dashboard origin.
 
+On HTTPS and localhost, Settings > Passkeys lets you save up to eight passkeys.
+Adding or removing a passkey requires a browser session and the current passcode.
+Use **Sign in with a passkey** to sign in without entering the passcode. API keys
+cannot manage passkeys. The passcode remains the recovery method if you lose a
+device or remove your last passkey.
+
+Removing a passkey ends every session created with it, including the current
+session when applicable. Password sessions survive. **Sign out everywhere** ends
+sessions and pending login attempts but preserves passkeys. Changing `PASSCODE`
+blocks new passkey operations until the next maintenance run, which removes all
+passkeys and pending attempts and revokes browser sessions. API keys survive.
+The stable owner handle remains in D1 through these operations. Back up D1 with
+its credential data to preserve enrolled passkeys.
+
 Authentication bootstrap endpoints are protected by the `AUTH_GUARD` Workers
 KV namespace. Login is limited to ten attempts per client every five minutes,
 and five incorrect passcodes within fifteen minutes lock that client out for
-thirty minutes. Device authorization creation is limited to five requests per
+thirty minutes. Passkey options are limited to ten requests per client every
+five minutes, and verification to thirty. Failed passkey assertions do not
+increment the passcode lockout counter. Device authorization creation is limited to five requests per
 client every ten minutes, while device polling permits 150 requests per client
 every ten minutes so the documented five-second polling interval remains valid.
 Rate-limit and lockout responses use HTTP 429 with `Retry-After`. KV is

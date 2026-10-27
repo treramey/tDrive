@@ -14,6 +14,8 @@ const FailureState = Schema.Struct({
 });
 
 const ratePolicies = {
+	passkeyBegin: { key: 'passkey-begin', limit: 10, windowSeconds: 5 * 60 },
+	passkeyFinish: { key: 'passkey-finish', limit: 30, windowSeconds: 5 * 60 },
 	passcodeLogin: {
 		key: 'passcode-login',
 		limit: 10,

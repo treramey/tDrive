@@ -5,6 +5,7 @@
 	import { getDashboardSession } from '$lib/dashboard/session.svelte';
 	import { getToasts } from '$lib/dashboard/toast.svelte';
 	import ApiKeys from '$lib/components/auth/ApiKeys.svelte';
+	import Passkeys from '$lib/components/auth/Passkeys.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Confirm from '$lib/components/ui/Confirm.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -117,6 +118,10 @@
 		</section>
 
 		<div class="mt-10 border-t border-zinc-200 pt-8">
+			<Passkeys />
+		</div>
+
+		<div class="mt-10 border-t border-zinc-200 pt-8">
 			<ApiKeys token={session.token} />
 		</div>
 
@@ -125,8 +130,8 @@
 			<p class="mt-1 text-sm text-zinc-500">
 				Sign out every browser and cancel pending device approvals. API keys
 				keep working — revoke them above if one may have leaked. Changing the
-				PASSCODE secret also signs out every browser on the next maintenance
-				run.
+				PASSCODE secret also signs out every browser on the next maintenance run
+				and removes all passkeys.
 			</p>
 			<Button
 				variant="danger"

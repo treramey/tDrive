@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { Effect } from 'effect';
-import { SESSION_COOKIE } from '$lib/server/auth-policy';
+import { clearBrowserSession } from '$lib/server/auth-browser';
 import { runEdge } from '$lib/server/edge';
 import { InvalidRequest } from '$lib/server/errors';
 import { Auth, authorizeWriteRequest } from '$lib/server/services/auth';
@@ -20,7 +20,7 @@ export const DELETE: RequestHandler = ({ cookies, request, url }) =>
 			const auth = yield* Auth;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			const revoked = yield* auth.revokeAllSessions;
-			cookies.delete(SESSION_COOKIE, { path: '/' });
+			clearBrowserSession(cookies);
 			return Response.json(
 				{ revoked },
 				{ headers: { 'Cache-Control': 'private, no-store' } }

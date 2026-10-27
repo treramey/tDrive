@@ -1,4 +1,5 @@
 import { Context } from 'runed';
+import { signInWithPasskey, passkeyMessage } from './passkeys';
 import {
 	ApiError,
 	BROWSER_SESSION,
@@ -44,21 +45,46 @@ export class DashboardSession {
 		this.error = '';
 		try {
 			await loginWithPasscode(value.trim());
-			await checkKey(BROWSER_SESSION);
-			saveKey('');
-			this.token = BROWSER_SESSION;
+			await this.adoptBrowserSession();
 		} catch (cause) {
 			const message =
 				cause instanceof Error
 					? cause.message
 					: 'Could not verify the passcode';
 			this.error =
-				location.protocol === 'http:'
+				location.protocol === 'http:' && location.hostname !== 'localhost'
 					? `${message}. This plain-HTTP origin cannot keep the secure session cookie; sign in with an API key instead.`
 					: message;
 		} finally {
 			this.connecting = false;
 		}
+	}
+
+	private async adoptBrowserSession() {
+		await checkKey(BROWSER_SESSION);
+		saveKey('');
+		this.token = BROWSER_SESSION;
+	}
+
+	async connectWithPasskey(signal?: AbortSignal) {
+		if (this.connecting) return;
+		this.connecting = true;
+		this.error = '';
+		try {
+			await signInWithPasskey(signal);
+			await this.adoptBrowserSession();
+		} catch (cause) {
+			if (!signal?.aborted) this.error = passkeyMessage(cause);
+		} finally {
+			this.connecting = false;
+		}
+	}
+
+	async restoreAfterRevocation() {
+		saveKey('');
+		this.token = '';
+		this.ready = false;
+		await this.restore();
 	}
 
 	async connectApiKey(value: string) {

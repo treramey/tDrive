@@ -36,11 +36,13 @@ install it with `bun install --frozen-lockfile`.
 
 - Path: `apps/web > @sveltejs/kit > cookie`
 - The advisory concerns out-of-bounds characters in user-controlled cookie
-  names, paths, or domains. tdrive sets exactly one cookie
-  (`__Host-adrive-session`) with a fixed name and fixed attributes
-  (`Path=/; HttpOnly; Secure; SameSite=Strict`), and never reflects user
-  input into cookie attributes, so the vulnerable condition is not
-  reachable.
+  names, paths, or domains. tdrive sets `__Host-adrive-session` and per-attempt
+  `__Host-adrive-wa-<id>` cookies. Auth generates each attempt ID from 16 random
+  bytes. `passkeyCookieName` accepts exactly 32 lowercase hexadecimal characters
+  before any cookie lookup, write, or deletion. Both cookie types have fixed
+  `Path=/; HttpOnly; Secure; SameSite=Strict` attributes and no Domain. Caller
+  input cannot introduce cookie syntax. Route tests reject invalid suffixes,
+  and the CDP browser proof checks the actual cookie attributes.
 - SvelteKit 2.70.3 still requires `cookie@^0.6.0`. A compatible transitive
   update cannot remove this finding. Do not force all cookie consumers onto
   another version or migrate to SvelteKit 3 solely to silence the audit.

@@ -5,6 +5,8 @@ description: Drive tdrive's local web dashboard, CLI, and HTTP/content origins w
 
 # Verify tdrive locally
 
+The skill retains the repository name `verify-adrive`; current workspace and CLI commands use `tdrive`.
+
 Read [features/README.md](features/README.md) first, then the matching feature recipe. The dashboard is the primary surface; `bun tdrive`, `/api/*`, and `/mcp` are additional user surfaces. This skill covers the first three; MCP needs a separate protocol journey. For real Cloudflare deployments use [verify-deployment](../verify-deployment/SKILL.md).
 
 ## Launch
@@ -40,7 +42,7 @@ Use the real browser controls, never internal Svelte state setters or JS-created
 
 Start `preview_recording_start` before the action, and stop with `preview_recording_stop` after the resulting state; copy its returned local file into `$RUN/evidence/`. Save `preview_snapshot` with `save: true`, copy its PNG into evidence, and save its accessibility tree as a text file. Record sanitized action steps as well. If recording is unsupported, retain before/after screenshots and the action transcript and report the missing video. Stop recordings and close your tab with `t3_preview_close` before teardown. If preview automation is absent or reports unsupported, record the exact error and use Playwright in a fresh browser context as a fallback. Save video, screenshots, and sanitized actions in the same evidence directory; retain a trace only after removing credentials; never silently substitute HTTP for UI coverage.
 
-CLI invocations use the real source CLI, in their own process with isolated configuration:
+CLI invocations use the package script's real `node --experimental-strip-types src/main.ts` entry point, in their own process with isolated configuration. Bypassing the Bun workspace wrapper keeps JSON and binary stdout free of runner prefixes:
 
 ```bash
 "$CONTROL" cli "$RUN" -- --json list
@@ -69,7 +71,7 @@ It requires a running Docker daemon and downloads the pinned Playwright 1.56.1 U
 
 ## Evidence
 
-All retained proof lives at `$RUN/evidence/`, outside disposable `runtime/`. Keep inputs, setup/server logs, doctor output, UI screenshots and ARIA snapshots, recording/trace when supported, HTTP response bodies/statuses, CLI transcripts with exit codes, and checksum comparisons. Write `report.md` with source SHA plus task diff identity, run path, feature/sub-feature IDs, every entry point attempted, PASS/FAIL/SKIPPED and reason, observed results, cleanup result, and links to artifacts. Do not include passcodes, API keys, cookies, or private signed URLs in transcripts or screenshots. Pause recording before showing a newly minted key and move off that screen before taking evidence.
+All retained proof lives at `$RUN/evidence/`, outside disposable `runtime/`. Keep inputs, setup/server logs, doctor output, UI screenshots and ARIA snapshots, recording/trace when supported, HTTP response bodies/statuses, CLI transcripts with exit codes, and checksum comparisons. Write `report.md` with source SHA plus `source-files.json` hashes and task diff identity, run path, feature/sub-feature IDs, every entry point attempted, PASS/FAIL/SKIPPED and reason, observed results, cleanup result, and links to artifacts. Do not include passcodes, API keys, cookies, or private signed URLs in transcripts or screenshots. Pause recording before showing a newly minted key and move off that screen before taking evidence.
 
 Exercise the real user path and capture both the action and resulting state. Verify a mutation by reopening/reloading and by a second user-facing read (CLI/API or downloaded bytes). A final screen or success toast alone is insufficient. API file metadata plus downloaded byte equality verifies the storage-facing behavior; it does **not** prove direct R2 object enumeration. If direct D1 inspection is needed, use `bun x wrangler d1 execute DB --local --command 'SELECT ...'` only from `$RUN/runtime/apps/web`, saving results in evidence. Never seed the behavior under test with SQL or a test-only endpoint. Mocks are allowed only at an existing production boundary. This skill has no dry-run mode: uploads, login, and site publishing really mutate local state. Observe file/network/git side effects when testing any future dry-run feature.
 

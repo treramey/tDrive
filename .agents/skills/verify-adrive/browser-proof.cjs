@@ -154,6 +154,7 @@ async function main() {
 			await anonymous.close();
 		}
 		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+		await page.goto('http://localhost:5173');
 		await page
 			.getByRole('heading', { name: 'Sign in to your drive', exact: true })
 			.waitFor();

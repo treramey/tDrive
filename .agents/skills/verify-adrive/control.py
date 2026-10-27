@@ -101,6 +101,7 @@ def launch(run):
         names = subprocess.check_output(
             ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
             cwd=ROOT).decode().split("\0")
+        source_files = {}
         for name in names:
             if not name or not (name.startswith(("apps/", "packages/", "scripts/"))
                                     or "/" not in name):
@@ -112,6 +113,8 @@ def launch(run):
                 dst = runtime / name
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
+                source_files[name] = hashlib.sha256(dst.read_bytes()).hexdigest()
+        write_json(run / "evidence/source-files.json", source_files)
         (runtime / "apps/web/.dev.vars").write_text(
             f'PASSCODE="{PASSCODE}"\nDASHBOARD_ORIGIN="{ORIGIN}"\n'
             'CONTENT_ORIGIN="http://localhost:5174"\nSEMANTIC_SEARCH="off"\n')

@@ -17,6 +17,7 @@
 		"check": "bun run --filter '@tdrive/*' --if-present check && bun run check:forbidden && bun run check:wrangler-drift && vp check",
 		"check:forbidden": "bun scripts/check-forbidden.mjs",
 		"check:wrangler-drift": "bun scripts/check-wrangler-drift.mjs",
+		"changeset": "changeset",
 		"db:migrate:local": "cd apps/web && bun x wrangler d1 migrations apply DB --local",
 		"format": "vp fmt --write .",
 		"format:check": "vp fmt --check .",
@@ -24,10 +25,15 @@
 		"key:create:local": "bun scripts/create-local-key.mjs",
 		"postinstall": "find node_modules -path '*/@effect/tsgo*/lib/tsc' -exec chmod +x {} +",
 		"release": "bash scripts/release.sh",
+		"release:version": "node scripts/app-release.mjs version",
+		"release:tag": "node scripts/app-release.mjs tag",
+		"release:verify-tag": "node scripts/app-release.mjs verify-tag",
 		"search:rebuild:local": "bun --filter @tdrive/web search:rebuild:local",
-		"test": "bun run --filter '@tdrive/*' --if-present test && bun --filter @tdrive/web test:runes && bun --filter @tdrive/web test:routes"
+		"test": "bun run test:release && bun run --filter '@tdrive/*' --if-present test && bun --filter @tdrive/web test:runes && bun --filter @tdrive/web test:routes",
+		"test:release": "node --test scripts/app-release.test.mjs"
 	},
 	"devDependencies": {
+		"@changesets/cli": "2.29.8",
 		"@oxlint/plugins": "1.89.0",
 		"vite-plus": "1.4.0",
 		"vitest": "^4.1.10",

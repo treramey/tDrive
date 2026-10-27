@@ -40,7 +40,7 @@ CLI for larger files.
 
 The marketing landing page lives in `apps/site` — a static assets-only
 Worker (no build step) deployed by `bun release` to
-`https://adrive.davis7.space`. Preview it locally with
+`https://tdrive.trevors.link`. Preview it locally with
 `cd apps/site && bunx wrangler dev`.
 
 ## Local setup

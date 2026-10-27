@@ -8,5 +8,5 @@
 	"assets": {
 		"directory": "./public"
 	},
-	"routes": [{ "pattern": "adrive.trevors.link", "custom_domain": true }]
+	"routes": [{ "pattern": "tdrive.trevors.link", "custom_domain": true }]
 }

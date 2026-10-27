@@ -28,16 +28,16 @@ the repository root.
    384 dims; embeddings run within the 10k neurons/day allocation).
 
 5. In the Cloudflare dashboard, open **Images → Transformations**, select
-   the zone that owns `CONTENT_ORIGIN` (`davis7.space` for
-   `files.davis7.space`), and enable transformations. Dashboard thumbnails
+   the zone that owns `CONTENT_ORIGIN` (`trevors.link` for
+   `files.trevors.link`), and enable transformations. Dashboard thumbnails
    require this zone-level setting.
 6. From `apps/web`: `wrangler secret put PASSCODE --env production`
    (12+ characters).
-7. The `davis7.space` zone must be active in Cloudflare. Remove existing
-   CNAME records for `drive.davis7.space`, `files.davis7.space`, and
-   `adrive.davis7.space` before deployment; the custom-domain routes in
+7. The `trevors.link` zone must be active in Cloudflare. Remove existing
+   CNAME records for `drive.trevors.link`, `files.trevors.link`, and
+   `tdrive.trevors.link` before deployment; the custom-domain routes in
    the `wrangler.jsonc` files create the required DNS records
-   automatically. `adrive.davis7.space` serves the static landing page
+   automatically. `tdrive.trevors.link` serves the static landing page
    (`apps/site`, an assets-only Worker with no build step).
 8. From the repo root: `bun release`
 9. From the repo root: set up backups on your backup host

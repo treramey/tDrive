@@ -30,6 +30,7 @@ export const signScheduledRequest = async (
 	cron: string
 ) => {
 	const key = await hmacKey(passcode, 'sign');
+
 	return bytesToHex(
 		await crypto.subtle.sign('HMAC', key, scheduledMessage(scheduledTime, cron))
 	);
@@ -44,13 +45,16 @@ export const verifyScheduledRequest = async (
 ) => {
 	if (!scheduledTime || !cron || !signature) return false;
 	const timestamp = Number(scheduledTime);
+
 	if (
 		!Number.isSafeInteger(timestamp) ||
 		Math.abs(now - timestamp) > SIGNATURE_WINDOW_MS
 	) {
 		return false;
 	}
+
 	const key = await hmacKey(passcode, 'verify');
+
 	return crypto.subtle.verify(
 		'HMAC',
 		key,

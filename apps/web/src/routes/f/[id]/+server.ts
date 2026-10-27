@@ -25,8 +25,10 @@ import { GrantSecrets } from '$lib/server/services/grant-secrets';
 
 const requestedVersion = (url: URL) => {
 	const value = url.searchParams.get('v');
+
 	if (value === null) return;
 	const version = Number(value);
+
 	return Number.isSafeInteger(version) && version > 0 ? version : null;
 };
 
@@ -37,22 +39,29 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 			const files = yield* Files;
 			const grantSecrets = yield* GrantSecrets;
 			const version = requestedVersion(url);
+
 			if (version === null) return yield* new NotFound({ id: params.id });
 			const hasGrant = url.searchParams.has('e') && url.searchParams.has('g');
 			const thumbnailSource = url.searchParams.get('purpose') === 'thumbnail';
+
 			if (thumbnailSource && !hasGrant) {
 				return yield* new NotFound({ id: params.id });
 			}
+
 			const content = yield* files.findContent(params.id, version, hasGrant);
 			const privateResponse = hasGrant || !content.file.public;
+
 			const dashboardPreview =
 				(content.file.contentType === 'application/pdf' ||
 					content.file.contentType.startsWith('text/html')) &&
 				url.searchParams.get('preview') === 'dashboard';
+
 			let verifiedThumbnailSource = false;
+
 			if (!content.file.public || hasGrant) {
 				const expiresAtSeconds = Number(url.searchParams.get('e'));
 				const signature = url.searchParams.get('g') ?? '';
+
 				const granted = yield* grantSecrets.verify({
 					contentOrigin: config.contentOrigin,
 					requestOrigin: url.origin,
@@ -62,22 +71,28 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 					signature,
 					purpose: thumbnailSource ? 'thumbnail-source' : undefined
 				});
+
 				if (!granted) return yield* new NotFound({ id: params.id });
 				verifiedThumbnailSource = thumbnailSource;
 			}
+
 			const blobs = yield* Blobs;
+
 			const range =
 				request.method === 'HEAD'
 					? null
 					: yield* decodeRangeHeader(request.headers.get('range'));
+
 			const pinnedVersion = version !== undefined;
 			const cacheControl = fileCacheControl(privateResponse, pinnedVersion);
 			const ifNoneMatch = request.headers.get('if-none-match');
 			const cacheRequest = fileContentCacheRequest(url);
+
 			const recordDownload = shouldRecordFileDownload(
 				range,
 				verifiedThumbnailSource
 			);
+
 			const headersFor = (
 				etag: string,
 				responseRange: {
@@ -85,27 +100,31 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 					readonly contentLength: number;
 					readonly contentRange?: string;
 				}
-			) => ({
-				'Accept-Ranges': 'bytes',
-				'Cache-Control': cacheControl,
-				'Content-Disposition': contentDisposition(
-					content.file.displayName,
-					content.file.contentType,
-					!content.file.public && !dashboardPreview
-				),
-				'Content-Length': String(responseRange.contentLength),
-				'Content-Security-Policy': contentSecurityPolicy(
-					content.file.contentType,
-					dashboardPreview ? config.dashboardOrigin : "'none'"
-				),
-				'Content-Type': content.file.contentType,
-				ETag: etag,
-				...(responseRange.contentRange
-					? { 'Content-Range': responseRange.contentRange }
-					: {}),
-				'Referrer-Policy': 'no-referrer',
-				'X-Content-Type-Options': 'nosniff'
-			});
+			) => {
+				const headers = new Headers({
+					'Accept-Ranges': 'bytes',
+					'Cache-Control': cacheControl,
+					'Content-Disposition': contentDisposition(
+						content.file.displayName,
+						content.file.contentType,
+						!content.file.public && !dashboardPreview
+					),
+					'Content-Length': String(responseRange.contentLength),
+					'Content-Security-Policy': contentSecurityPolicy(
+						content.file.contentType,
+						dashboardPreview ? config.dashboardOrigin : "'none'"
+					),
+					'Content-Type': content.file.contentType,
+					ETag: etag,
+					'Referrer-Policy': 'no-referrer',
+					'X-Content-Type-Options': 'nosniff'
+				});
+
+				if (responseRange.contentRange)
+					headers.set('Content-Range', responseRange.contentRange);
+
+				return headers;
+			};
 
 			if (
 				canUseEdgeCache(
@@ -117,11 +136,14 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 			) {
 				const cached = yield* matchEdgeCache(platform, cacheRequest);
 				const cachedEtag = cached?.headers.get('ETag');
+
 				if (cached && cachedEtag) {
 					if (recordDownload) yield* files.recordDownload(content.file.id);
+
 					if (matchesEtag(ifNoneMatch, cachedEtag)) {
 						return notModifiedResponse(cachedEtag, cacheControl);
 					}
+
 					if (request.method === 'HEAD') {
 						return new Response(null, {
 							status: 200,
@@ -131,15 +153,18 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 							})
 						});
 					}
+
 					return cached;
 				}
 			}
 
 			if (request.method === 'HEAD') {
 				const object = yield* blobs.head(content.r2Key);
+
 				if (!privateResponse && matchesEtag(ifNoneMatch, object.httpEtag)) {
 					return notModifiedResponse(object.httpEtag, cacheControl);
 				}
+
 				return new Response(null, {
 					status: 200,
 					headers: headersFor(object.httpEtag, {
@@ -153,9 +178,12 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 				range === null && !privateResponse
 					? firstIfNoneMatchEtag(ifNoneMatch)
 					: null;
+
 			if (conditionalEtag === '*') {
 				const object = yield* blobs.head(content.r2Key);
+
 				if (recordDownload) yield* files.recordDownload(content.file.id);
+
 				return notModifiedResponse(object.httpEtag, cacheControl);
 			}
 
@@ -166,27 +194,33 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 							object: yield* blobs.get(content.r2Key, range)
 						}
 					: yield* blobs.getIfChanged(content.r2Key, conditionalEtag);
+
 			if (!loaded.changed) {
 				if (recordDownload) yield* files.recordDownload(content.file.id);
+
 				return notModifiedResponse(loaded.object.httpEtag, cacheControl);
 			}
+
 			if (
 				range === null &&
 				!privateResponse &&
 				matchesEtag(ifNoneMatch, loaded.object.httpEtag)
 			) {
 				if (recordDownload) yield* files.recordDownload(content.file.id);
+
 				return notModifiedResponse(loaded.object.httpEtag, cacheControl);
 			}
 
 			const object = loaded.object;
 			const responseRange = rangeHeaders(object, content.file.sizeBytes, range);
+
 			if (!responseRange) {
 				return yield* new StorageError({
 					operation: 'read file range',
 					cause: 'R2 returned invalid byte range metadata'
 				});
 			}
+
 			if (recordDownload) {
 				yield* files.recordDownload(content.file.id);
 			}
@@ -195,6 +229,7 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 				status: responseRange.status,
 				headers: headersFor(object.httpEtag, responseRange)
 			});
+
 			if (
 				canUseEdgeCache(
 					privateResponse,
@@ -205,6 +240,7 @@ const serveFile: RequestHandler = ({ params, platform, request, url }) =>
 			) {
 				storeEdgeCache(platform, cacheRequest, response);
 			}
+
 			return response;
 		})
 	);

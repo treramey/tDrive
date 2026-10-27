@@ -23,10 +23,6 @@ import {
 	DELETE as logout
 } from '../../../routes/api/auth/session/+server';
 
-vi.mock('$app/server', async () =>
-	(await import('../test/route-context')).mockGetRequestEvent()
-);
-
 const Prompt = Schema.Struct({
 	ceremonyId: Schema.String,
 	options: Schema.Struct({
@@ -34,8 +30,11 @@ const Prompt = Schema.Struct({
 		user: Schema.optional(Schema.Struct({ id: Schema.String }))
 	})
 });
+
 type Authenticator = Awaited<ReturnType<typeof softwareAuthenticator>>;
+
 let ctx: RouteTestContext;
+
 const send = async <E>(
 	handler: (event: E) => Response | Promise<Response>,
 	input: {
@@ -49,6 +48,7 @@ const send = async <E>(
 	} = {}
 ) => {
 	const browser = input.browser ?? ctx;
+
 	const event = browser.event({
 		path: input.path ?? '/api/auth/passkeys',
 		method: input.method ?? 'POST',
@@ -61,11 +61,13 @@ const send = async <E>(
 		headers: { 'content-type': 'application/json', ...input.headers },
 		params: input.params
 	});
+
 	return call(handler, {
 		...event,
 		getClientAddress: () => input.client ?? crypto.randomUUID()
 	});
 };
+
 const auth = <A>(
 	f: (service: typeof Auth.Service) => Effect.Effect<A, unknown>
 ) =>
@@ -75,47 +77,62 @@ const auth = <A>(
 			return yield* f(yield* Auth);
 		})
 	);
+
 const password = async (browser = ctx) => {
 	const response = await send(passwordLogin, {
 		browser,
 		path: '/api/auth/session',
 		body: { passcode: ctx.env.PASSCODE }
 	});
+
 	expect(response.status).toBe(200);
 };
+
 const startEnroll = async (name = 'Laptop') => {
 	const response = await send(enrollOptions, {
 		body: { name, passcode: ctx.env.PASSCODE }
 	});
+
 	expect(response.status).toBe(200);
+
 	return Schema.decodeUnknownSync(Prompt)(await response.json());
 };
+
 const enroll = async (device: Authenticator, packed = false) => {
 	const prompt = await startEnroll();
+
 	const credential = await device.register({
 		challenge: prompt.options.challenge,
 		packed
 	});
+
 	const result = await send(enrollVerify, {
 		body: { ceremonyId: prompt.ceremonyId, credential }
 	});
+
 	expect(result.status).toBe(200);
 	const handle = prompt.options.user?.id;
+
 	if (!handle)
 		throw new Error('Registration did not supply the stable owner handle');
+
 	return handle;
 };
+
 const startLogin = async () => {
 	const response = await send(loginOptions);
 	expect(response.status).toBe(200);
+
 	return Schema.decodeUnknownSync(Prompt)(await response.json());
 };
+
 const assertion = async (
 	device: Authenticator,
 	userHandle: string,
 	options: Partial<Parameters<Authenticator['assert']>[0]> = {}
 ) => {
 	const prompt = await startLogin();
+
 	return {
 		ceremonyId: prompt.ceremonyId,
 		credential: await device.assert({
@@ -125,58 +142,65 @@ const assertion = async (
 		})
 	};
 };
+
 const list = async () =>
 	Schema.decodeUnknownSync(PasskeyListResponseSchema)(
 		await (
 			await call(inventory, ctx.event({ path: '/api/auth/passkeys' }))
 		).json()
 	);
+
 const count = async (
 	table: 'dashboard_sessions' | 'passkeys' | 'passkey_challenges'
 ) => {
 	const row = await ctx.env.DB.prepare(
 		`SELECT count(*) AS count FROM ${table}`
 	).first('count');
+
 	return row;
 };
+
 const freezeCommits = (target = 1) => {
 	const original = ctx.env.DB;
 	const claims = new WeakSet<D1PreparedStatement>();
 	const reached = Promise.withResolvers<void>();
 	const resume = Promise.withResolvers<void>();
 	let arrivals = 0;
-	ctx.env.DB = new Proxy(original, {
-		get(db, property) {
-			if (property === 'prepare')
-				return (sql: string) => {
-					const statement = db.prepare(sql);
-					if (!sql.startsWith('UPDATE passkey_challenges SET consumed_by'))
-						return statement;
-					return new Proxy(statement, {
-						get(value, key) {
-							if (key === 'bind')
-								return (...params: unknown[]) => {
-									const bound = value.bind(...params);
-									claims.add(bound);
-									return bound;
-								};
-							return Reflect.get(value, key);
-						}
-					});
-				};
-			if (property === 'batch')
-				return async (statements: D1PreparedStatement[]) => {
-					if (statements.some((item) => claims.has(item))) {
-						arrivals++;
-						if (arrivals === target) reached.resolve();
-						await resume.promise;
-					}
-					return db.batch(statements);
-				};
-			const value: unknown = Reflect.get(db, property);
-			return typeof value === 'function' ? value.bind(db) : value;
-		}
-	});
+	ctx.env.DB = {
+		prepare(sql) {
+			const statement = original.prepare(sql);
+
+			if (!sql.startsWith('UPDATE passkey_challenges SET consumed_by'))
+				return statement;
+
+			return {
+				bind(...params) {
+					const bound = statement.bind(...params);
+					claims.add(bound);
+
+					return bound;
+				},
+				first: statement.first.bind(statement),
+				run: statement.run.bind(statement),
+				all: statement.all.bind(statement),
+				raw: statement.raw.bind(statement)
+			};
+		},
+		async batch<T>(statements: D1PreparedStatement[]) {
+			if (statements.some((item) => claims.has(item))) {
+				arrivals++;
+
+				if (arrivals === target) reached.resolve();
+				await resume.promise;
+			}
+
+			return original.batch<T>(statements);
+		},
+		exec: original.exec.bind(original),
+		withSession: original.withSession.bind(original),
+		dump: original.dump.bind(original)
+	};
+
 	return {
 		reached: reached.promise,
 		resume: () => resume.resolve(),
@@ -243,8 +267,10 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 	it('rejects malformed encoding, ID mismatch, and missing user handle', async () => {
 		const device = await softwareAuthenticator();
 		const handle = await enroll(device);
+
 		for (const field of ['rawId', 'signature', 'userHandle']) {
 			const input = await assertion(device, handle);
+
 			const credential =
 				field === 'rawId'
 					? { ...input.credential, rawId: 'different' }
@@ -255,6 +281,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 								[field]: field === 'signature' ? 'bad=' : undefined
 							}
 						};
+
 			await expect(
 				send(loginVerify, { body: { ...input, credential } })
 			).rejects.toMatchObject({ status: 400 });
@@ -299,9 +326,11 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 	it('requires a live original session at enrollment completion', async () => {
 		const device = await softwareAuthenticator();
 		const prompt = await startEnroll();
+
 		const credential = await device.register({
 			challenge: prompt.options.challenge
 		});
+
 		await send(logout, { path: '/api/auth/session', method: 'DELETE' });
 		await password();
 		await expect(
@@ -318,6 +347,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 			const key = await auth((service) =>
 				service.createApiKey('passkey-test', { scope })
 			);
+
 			const headers = { authorization: `Bearer ${key.token}` };
 			await expect(
 				send(inventory, { method: 'GET', headers })
@@ -360,6 +390,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 		const name = passkeyCookieName(input.ceremonyId);
 		const binding = ctx.cookies.get(name);
 		expect((await send(loginVerify, { body: input })).status).toBe(200);
+
 		if (!binding) throw new Error('Missing binding fixture');
 		ctx.cookies.set(name, binding);
 		const before = await count('dashboard_sessions');
@@ -383,6 +414,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 			const outcomes = Promise.allSettled([one, two]);
 			await gate.reached;
 			gate.resume();
+
 			try {
 				const results = await outcomes;
 				expect(
@@ -406,6 +438,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 	it('accepts zero then increasing counters and rejects equal or decreasing positive counters', async () => {
 		const device = await softwareAuthenticator();
 		const handle = await enroll(device);
+
 		for (const counter of [0, 0, 1, 2])
 			expect(
 				(
@@ -414,6 +447,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 					})
 				).status
 			).toBe(200);
+
 		for (const counter of [2, 1, 0])
 			await expect(
 				send(loginVerify, {
@@ -432,6 +466,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 			const completion = send(loginVerify, { body: input });
 			const result = Promise.allSettled([completion]);
 			await gate.reached;
+
 			try {
 				if (change === 'remove')
 					await send(remove, {
@@ -439,12 +474,15 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 						params: { id: device.id },
 						body: { passcode: ctx.env.PASSCODE }
 					});
+
 				if (change === 'logout')
 					await auth((service) => service.revokeAllSessions);
+
 				if (change === 'rotate') {
 					ctx.env.PASSCODE = 'changed-passcode-for-test';
 					await auth((service) => service.enforcePasscodeRotation);
 				}
+
 				if (change === 'expire')
 					await ctx.env.DB.prepare(
 						'UPDATE passkey_challenges SET expires_at = 0 WHERE id = ?'
@@ -455,6 +493,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 				gate.resume();
 				expect((await result)[0]?.status).toBe('rejected');
 				expect(await count('dashboard_sessions')).toBe(before);
+
 				if (change === 'expire')
 					expect(
 						await ctx.env.DB.prepare(
@@ -475,13 +514,16 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 		const device = await softwareAuthenticator();
 		const handle = await enroll(device);
 		await send(loginVerify, { body: await assertion(device, handle) });
+
 		const response = await send(remove, {
 			method: 'DELETE',
 			params: { id: device.id },
 			body: { passcode: ctx.env.PASSCODE }
 		});
+
 		expect(await response.json()).toEqual({ signedOut: true });
 		expect(ctx.cookies.get(SESSION_COOKIE)).toBeUndefined();
+
 		if (!passwordToken) throw new Error('Missing password session');
 		ctx.cookies.set(SESSION_COOKIE, passwordToken);
 		expect((await list()).passkeys).toEqual([]);
@@ -534,11 +576,14 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 	it('enforces the eight-key cap atomically across two enrollments at the final slot', async () => {
 		for (let index = 0; index < 7; index++)
 			await enroll(await softwareAuthenticator());
+
 		const devices = await Promise.all([
 			softwareAuthenticator(),
 			softwareAuthenticator()
 		]);
+
 		const inputs = [];
+
 		for (const device of devices) {
 			const prompt = await startEnroll();
 			inputs.push({
@@ -548,12 +593,16 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 				})
 			});
 		}
+
 		const gate = freezeCommits(2);
+
 		const results = Promise.allSettled(
 			inputs.map((body) => send(enrollVerify, { body }))
 		);
+
 		await gate.reached;
 		gate.resume();
+
 		try {
 			expect(
 				(await results).filter((result) => result.status === 'fulfilled')
@@ -572,6 +621,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 		expect((await send(loginOptions, { client: 'rate-begin' })).status).toBe(
 			429
 		);
+
 		for (let index = 0; index < 30; index++)
 			await expect(
 				send(loginVerify, { client: 'rate-finish' })
@@ -579,6 +629,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 		expect((await send(loginVerify, { client: 'rate-finish' })).status).toBe(
 			429
 		);
+
 		for (const client of ['rate-begin', 'rate-finish'])
 			expect(
 				(
@@ -613,16 +664,21 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 		async (change) => {
 			const device = await softwareAuthenticator();
 			const prompt = await startEnroll();
+
 			const credential = await device.register({
 				challenge: prompt.options.challenge
 			});
+
 			const gate = freezeCommits();
+
 			const outcome = Promise.allSettled([
 				send(enrollVerify, {
 					body: { ceremonyId: prompt.ceremonyId, credential }
 				})
 			]);
+
 			await gate.reached;
+
 			try {
 				if (change === 'session')
 					await ctx.env.DB.prepare('DELETE FROM dashboard_sessions').run();
@@ -658,6 +714,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 			"CREATE TRIGGER fail_passkey_session BEFORE INSERT ON dashboard_sessions WHEN NEW.passkey_id IS NOT NULL BEGIN SELECT RAISE(ABORT, 'fixture failure'); END"
 		).run();
 		const logging = vi.spyOn(console, 'error').mockImplementation(() => {});
+
 		try {
 			await expect(send(loginVerify, { body: input })).rejects.toMatchObject({
 				status: 502
@@ -688,6 +745,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 				controller.close();
 			}
 		});
+
 		await expect(
 			call(
 				loginVerify,
@@ -698,6 +756,7 @@ describe('passkeys with real signatures and local workerd D1/KV', () => {
 				})
 			)
 		).rejects.toMatchObject({ status: 413 });
+
 		for (const id of ['x', 'A'.repeat(32), '0'.repeat(32) + '; injected=1'])
 			expect(() => passkeyCookieName(id)).toThrow();
 	});

@@ -5,17 +5,19 @@ import { retryAt, safeIndexError } from '../../semantic-policy';
 import { Effect } from 'effect';
 import { forgetTagListCache } from '../tags';
 import type { FileInternals } from './internals';
-import type { FilesShape } from './types';
+import type { FilesService } from './types';
 
 export const purgeOps = (
 	internals: FileInternals
-): Pick<FilesShape, 'sweepPurges'> => {
+): Pick<FilesService, 'sweepPurges'> => {
 	const { db, blobs } = internals;
 	const { preparePurgeCommand } = internals;
+
 	return {
 		sweepPurges: Effect.fn('Files.sweepPurges')(function* (limit) {
 			const bounded = Math.max(1, Math.min(limit, 10));
 			const now = new Date().toISOString();
+
 			const due = yield* Effect.tryPromise({
 				try: async () => {
 					const result = await db
@@ -38,8 +40,10 @@ export const purgeOps = (
 						)
 						.bind(now, now, now, now, bounded)
 						.all<{ id: string }>();
+
 					if (!result.success)
 						throw new Error(result.error ?? 'Purge listing failed');
+
 					return result.results;
 				},
 				catch: (cause) =>
@@ -84,6 +88,7 @@ export const purgeOps = (
 					catch: (cause) =>
 						new StorageError({ operation: 'claim file purge', cause })
 				});
+
 				if (claimed.meta.changes !== 1) continue;
 
 				const deletion = yield* Effect.tryPromise({
@@ -102,11 +107,13 @@ export const purgeOps = (
 								.bind(row.id)
 								.all<{ r2_key: string }>()
 						]);
+
 						if (!versions.success || !assets.success) {
 							throw new Error(
 								versions.error ?? assets.error ?? 'Purge key listing failed'
 							);
 						}
+
 						return {
 							keys: [
 								...versions.results
@@ -136,6 +143,7 @@ export const purgeOps = (
 											.bind(row.id)
 											.first<{ purge_attempts: number }>()
 									)?.purge_attempts ?? 1;
+
 								await db
 									.prepare(
 										`UPDATE files
@@ -158,6 +166,7 @@ export const purgeOps = (
 						}).pipe(Effect.as(false))
 					)
 				);
+
 				if (!deleted) continue;
 
 				yield* Effect.tryPromise({
@@ -165,6 +174,7 @@ export const purgeOps = (
 						const results = await db.batch(
 							purgeCompletionCommands(row.id, now).map(preparePurgeCommand)
 						);
+
 						if (
 							results[3]?.meta.changes !== 1 ||
 							results[4]?.meta.changes !== 1
@@ -177,7 +187,8 @@ export const purgeOps = (
 				});
 				forgetTagListCache(db);
 			}
+
 			return due.length;
 		})
-	} satisfies Pick<FilesShape, 'sweepPurges'>;
+	} satisfies Pick<FilesService, 'sweepPurges'>;
 };

@@ -7,7 +7,7 @@ type TrashFlowsDeps = {
 		readonly token: string;
 	};
 	readonly toasts: Toasts;
-	readonly refetch: () => Promise<unknown>;
+	readonly refetch: () => Promise<void>;
 	readonly clearSelection: () => void;
 	readonly onRemove: (file: DashboardFile) => void;
 };
@@ -30,10 +30,13 @@ export const createTrashFlows = ({
 		action: 'trash' | 'restore'
 	) => {
 		const token = session.token;
+
 		try {
 			await mutateFile(token, file.id, { action });
+
 			if (session.token !== token) return;
 			onRemove(file);
+
 			if (action === 'trash') {
 				toasts.success('Moved to trash', {
 					label: 'Undo',
@@ -56,15 +59,20 @@ export const createTrashFlows = ({
 		if (purging || targets.length === 0) return;
 		const token = session.token;
 		purging = true;
+
 		try {
 			const outcomes = await Promise.allSettled(
 				targets.map((file) => mutateFile(token, file.id, { action: 'purge' }))
 			);
+
 			await refetch();
+
 			if (session.token !== token) return;
+
 			const failed = outcomes.filter(
 				(outcome) => outcome.status === 'rejected'
 			).length;
+
 			if (failed > 0) {
 				toasts.error(
 					new Error(
@@ -91,9 +99,11 @@ export const createTrashFlows = ({
 		if (purging) return;
 		const token = session.token;
 		purging = true;
+
 		try {
 			await emptyTrash(token);
 			await refetch();
+
 			if (session.token !== token) return;
 			clearSelection();
 			emptyTrashOpen = false;

@@ -10,12 +10,15 @@ export const POST: RequestHandler = ({ cookies, request, url }) =>
 		Effect.gen(function* () {
 			const auth = yield* Auth;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
+
 			const input = yield* decodeJson(
 				request,
 				DeviceApprovalSchema,
 				'A device approval code is required'
 			);
+
 			yield* auth.approveDevice(input.userCode);
+
 			return Response.json({ ok: true as const });
 		})
 	);
@@ -25,12 +28,15 @@ export const DELETE: RequestHandler = ({ cookies, request, url }) =>
 		Effect.gen(function* () {
 			const auth = yield* Auth;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
+
 			const input = yield* decodeJson(
 				request,
 				DeviceApprovalSchema,
 				'A device approval code is required'
 			);
+
 			yield* auth.denyDevice(input.userCode);
+
 			return Response.json({ ok: true as const });
 		})
 	);

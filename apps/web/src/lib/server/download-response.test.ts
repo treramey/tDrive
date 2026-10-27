@@ -32,9 +32,11 @@ describe('download ranges', () => {
 			contentLength: 1_000,
 			contentRange: undefined
 		};
+
 		expect(
 			rangeHeaders({ size: 1_000, range: undefined }, 1_000, 'bytes=0-99')
 		).toEqual(expected);
+		// SAFETY: intentionally malformed range metadata verifies the full-response fallback.
 		expect(
 			rangeHeaders({ size: 1_000, range: {} as R2Range }, 1_000, 'bytes=0-99')
 		).toEqual(expected);
@@ -49,6 +51,7 @@ describe('download ranges', () => {
 			'suffix',
 			{ get: () => undefined }
 		);
+
 		expect(
 			rangeHeaders({ size: 1_000, range: offsetRange }, 1_000, 'bytes=100-299')
 		).toEqual({

@@ -23,11 +23,15 @@
 
 	const saveName = async () => {
 		const next = name.trim();
+
 		if (!next || next === tag.name || busy) {
 			name = tag.name;
+
 			return;
 		}
+
 		busy = true;
+
 		try {
 			const updated = await updateTag(token, tag.id, { name: next });
 			name = updated.name;
@@ -44,11 +48,14 @@
 	const saveColor = async (color: string) => {
 		if (busy) return false;
 		busy = true;
+
 		try {
 			onchanged(await updateTag(token, tag.id, { color }));
+
 			return true;
 		} catch (cause) {
 			toasts.error(cause, 'Could not update the tag color');
+
 			return false;
 		} finally {
 			busy = false;
@@ -57,6 +64,7 @@
 
 	const remove = async () => {
 		busy = true;
+
 		try {
 			await deleteTag(token, tag.id);
 			onchanged();

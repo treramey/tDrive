@@ -7,13 +7,13 @@ const context = {
 	contentOrigin: 'https://files.example.com'
 };
 
-const htmlResponse = (csp?: string) =>
-	new Response('<!doctype html>', {
-		headers: {
-			'Content-Type': 'text/html; charset=utf-8',
-			...(csp ? { 'Content-Security-Policy': csp } : {})
-		}
-	});
+const htmlResponse = (csp?: string) => {
+	const headers = new Headers({ 'Content-Type': 'text/html; charset=utf-8' });
+
+	if (csp) headers.set('Content-Security-Policy', csp);
+
+	return new Response('<!doctype html>', { headers });
+};
 
 describe('applySecurityHeaders', () => {
 	it('sets baseline headers on dashboard HTML', () => {
@@ -33,6 +33,7 @@ describe('applySecurityHeaders', () => {
 			...context,
 			requestOrigin: 'http://localhost:5173'
 		});
+
 		expect(response.headers.get('Strict-Transport-Security')).toBeNull();
 	});
 
@@ -51,6 +52,7 @@ describe('applySecurityHeaders', () => {
 			htmlResponse(`script-src 'self' 'nonce-abc123'`),
 			context
 		);
+
 		const csp = response.headers.get('Content-Security-Policy') ?? '';
 		expect(csp).toContain(`script-src 'self' 'nonce-abc123'`);
 	});
@@ -65,6 +67,7 @@ describe('applySecurityHeaders', () => {
 			}),
 			{ ...context, pathname: '/f/abc' }
 		);
+
 		expect(response.headers.get('Content-Security-Policy')).toBe(
 			`default-src 'none'; sandbox`
 		);
@@ -74,10 +77,12 @@ describe('applySecurityHeaders', () => {
 		const base = new Response('bytes', {
 			headers: { 'Referrer-Policy': 'no-referrer' }
 		});
+
 		const response = applySecurityHeaders(base, {
 			...context,
 			pathname: '/f/abc'
 		});
+
 		expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
 	});
 
@@ -88,6 +93,7 @@ describe('applySecurityHeaders', () => {
 			}),
 			{ ...context, pathname: '/mcp' }
 		);
+
 		expect(response.headers.get('Cache-Control')).toBe('private, no-store');
 	});
 
@@ -98,6 +104,7 @@ describe('applySecurityHeaders', () => {
 			}),
 			{ ...context, pathname: '/api/files' }
 		);
+
 		expect(response.headers.get('Cache-Control')).toBe('private, no-store');
 	});
 
@@ -111,6 +118,7 @@ describe('applySecurityHeaders', () => {
 			}),
 			{ ...context, pathname: '/api/files' }
 		);
+
 		expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
 	});
 
@@ -121,6 +129,7 @@ describe('applySecurityHeaders', () => {
 			}),
 			context
 		);
+
 		expect(response.headers.get('Content-Security-Policy')).toBeNull();
 		expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
 	});

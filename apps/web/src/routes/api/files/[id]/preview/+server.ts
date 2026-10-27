@@ -9,14 +9,17 @@ import { Files } from '$lib/server/services/files';
 
 const requestedVersion = (url: URL) => {
 	const value = url.searchParams.get('v');
+
 	if (value === null) return;
 	const version = Number(value);
+
 	if (!Number.isSafeInteger(version) || version < 1) {
 		throw new InvalidRequest({
 			status: 400,
 			message: 'Version must be a positive integer'
 		});
 	}
+
 	return version;
 };
 
@@ -27,6 +30,7 @@ export const GET: RequestHandler = ({ cookies, params, request, url }) =>
 			const blobs = yield* Blobs;
 			const files = yield* Files;
 			yield* authorizeRequest(auth, request, url, cookies);
+
 			const version = yield* Effect.try({
 				try: () => requestedVersion(url),
 				catch: (cause) =>
@@ -39,16 +43,19 @@ export const GET: RequestHandler = ({ cookies, params, request, url }) =>
 			});
 
 			const content = yield* files.findContent(params.id, version, true);
+
 			const kind = previewKind(
 				content.file.displayName,
 				content.file.contentType
 			);
+
 			if (!kind) {
 				return yield* new InvalidRequest({
 					status: 400,
 					message: 'Preview unavailable for this file'
 				});
 			}
+
 			if (content.file.sizeBytes > maxPreviewBytes) {
 				return yield* new InvalidRequest({
 					status: 413,
@@ -57,6 +64,7 @@ export const GET: RequestHandler = ({ cookies, params, request, url }) =>
 			}
 
 			const body = yield* blobs.readTextPrefix(content.r2Key, maxPreviewBytes);
+
 			return new Response(body, {
 				headers: {
 					'Cache-Control': 'private, no-store',

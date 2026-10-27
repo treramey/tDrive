@@ -1,3 +1,4 @@
+import { Schema } from 'effect';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -30,6 +31,7 @@ const makeDatabase = () => {
 			('wanted', 'wanted', 'wanted', '2026-07-27T00:00:00.000Z'),
 			('wrong', 'wrong', 'wrong', '2026-07-27T00:00:00.000Z')`
 	);
+
 	return database;
 };
 
@@ -78,14 +80,16 @@ const run = (database: DatabaseSync, command: SearchCommand) =>
 		.prepare(command.sql)
 		.all(...command.bindings)
 		.map((row) => {
-			if (typeof row.file_id !== 'string') {
+			if (!Schema.is(Schema.String)(row.file_id)) {
 				throw new Error('Search fixture returned an invalid file id');
 			}
+
 			return { file_id: row.file_id };
 		});
 
 const seedCrowdingFixture = (database: DatabaseSync) => {
 	const ineligibleIds: string[] = [];
+
 	for (let index = 0; index < 100; index += 1) {
 		const id = `a-${index.toString().padStart(3, '0')}`;
 		ineligibleIds.push(id);
@@ -96,7 +100,9 @@ const seedCrowdingFixture = (database: DatabaseSync) => {
 				index >= 20 && index < 40 ? '2026-07-26T00:00:00.000Z' : undefined
 		});
 	}
+
 	insertFile(database, 'z-eligible', { tagId: 'wanted' });
+
 	return ineligibleIds;
 };
 
@@ -123,6 +129,7 @@ describe('pre-limit search candidate filtering', () => {
 	it('filters semantic eligibility before fusion so wrong tags cannot crowd out keywords', () => {
 		const database = makeDatabase();
 		const ineligibleIds = seedCrowdingFixture(database);
+
 		const semantic = run(
 			database,
 			eligibleSemanticCommand(
@@ -131,6 +138,7 @@ describe('pre-limit search candidate filtering', () => {
 				['wanted']
 			)
 		).map((row) => ({ fileId: row.file_id }));
+
 		expect(semantic).toEqual([{ fileId: 'z-eligible' }]);
 
 		const keyword = [
@@ -139,11 +147,13 @@ describe('pre-limit search candidate filtering', () => {
 				fileId: `keyword-${index}`
 			}))
 		];
+
 		const fused = reciprocalRankFusion({
 			keyword: { results: keyword, weight: 1 },
 			trigram: { results: [], weight: 0.5 },
 			semantic: { results: semantic, weight: 1 }
 		});
+
 		expect(fused).toHaveLength(50);
 		expect(fused.every((row) => !row.fileId.startsWith('a-'))).toBe(true);
 		expect(fused[0]?.fileId).toBe('z-eligible');

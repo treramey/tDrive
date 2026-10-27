@@ -1,3 +1,4 @@
+import { Schema } from 'effect';
 import { createMcpHandler } from 'agents/mcp/server';
 import { describe, expect, it } from 'vitest';
 import { mcpAllowedHostnames } from './handler';
@@ -7,10 +8,12 @@ import {
 	createTdriveMcpServer
 } from './server';
 
+// SAFETY: discovery requests only read DASHBOARD_ORIGIN; no storage tools execute in these protocol tests.
 const env = {
 	DASHBOARD_ORIGIN: 'https://drive.example.com'
 } as Env;
 
+// SAFETY: initialization and tools/list only use waitUntil; other Worker APIs are not invoked.
 const ctx = {
 	waitUntil: (promise: Promise<unknown>) => {
 		void promise;
@@ -21,6 +24,7 @@ const ctx = {
 
 const parseRpcBody = async (response: Response) => {
 	const text = await response.text();
+
 	const payload = text.startsWith('event:')
 		? text
 				.split('\n')
@@ -28,17 +32,25 @@ const parseRpcBody = async (response: Response) => {
 				.map((line) => line.slice(5).trim())
 				.find((line) => line.startsWith('{'))
 		: text;
+
 	if (!payload) throw new Error(`MCP response had no JSON payload: ${text}`);
-	return JSON.parse(payload) as {
-		result?: {
-			tools?: Array<{ name: string }>;
-			serverInfo?: { name: string };
-		};
-		error?: { message: string };
-	};
+
+	return Schema.decodeUnknownSync(
+		Schema.Struct({
+			result: Schema.optional(
+				Schema.Struct({
+					tools: Schema.optional(
+						Schema.Array(Schema.Struct({ name: Schema.String }))
+					),
+					serverInfo: Schema.optional(Schema.Struct({ name: Schema.String }))
+				})
+			),
+			error: Schema.optional(Schema.Struct({ message: Schema.String }))
+		})
+	)(JSON.parse(payload));
 };
 
-const rpc = async (scope: 'read-only' | 'read-write', body: unknown) => {
+const rpc = async <A>(scope: 'read-only' | 'read-write', body: A) => {
 	const handler = createMcpHandler(
 		() =>
 			createTdriveMcpServer({
@@ -57,6 +69,7 @@ const rpc = async (scope: 'read-only' | 'read-write', body: unknown) => {
 			allowedOriginHostnames: mcpAllowedHostnames(env.DASHBOARD_ORIGIN)
 		}
 	);
+
 	const response = await handler(
 		new Request('https://drive.example.com/mcp', {
 			method: 'POST',
@@ -70,6 +83,7 @@ const rpc = async (scope: 'read-only' | 'read-write', body: unknown) => {
 		env,
 		ctx
 	);
+
 	return {
 		status: response.status,
 		body: await parseRpcBody(response)
@@ -88,6 +102,7 @@ describe('MCP server factory', () => {
 				clientInfo: { name: 'tdrive-test', version: '0.0.0' }
 			}
 		});
+
 		expect(status).toBe(200);
 		expect(body.error).toBeUndefined();
 		expect(body.result?.serverInfo?.name).toBe('tdrive');
@@ -100,12 +115,11 @@ describe('MCP server factory', () => {
 			method: 'tools/list',
 			params: {}
 		});
+
 		const names = (body.result?.tools ?? []).map((tool) => tool.name);
 		expect(names.sort()).toEqual([...READ_TOOL_NAMES].sort());
 		expect(
-			names.some((name) =>
-				WRITE_TOOL_NAMES.includes(name as (typeof WRITE_TOOL_NAMES)[number])
-			)
+			names.some((name) => new Set<string>(WRITE_TOOL_NAMES).has(name))
 		).toBe(false);
 	});
 
@@ -116,6 +130,7 @@ describe('MCP server factory', () => {
 			method: 'tools/list',
 			params: {}
 		});
+
 		const names = (body.result?.tools ?? []).map((tool) => tool.name);
 		expect(names).toEqual(expect.arrayContaining([...READ_TOOL_NAMES]));
 		expect(names).toEqual(expect.arrayContaining([...WRITE_TOOL_NAMES]));

@@ -1,14 +1,15 @@
 import type { DashboardFile } from '@tdrive/shared';
 import { flushSync } from 'svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { listFiles, type FileListPayload } from './api';
+import type {
+	listFiles as listFilesOperation,
+	searchFiles as searchFilesOperation,
+	FileListPayload
+} from './api';
 import { setupFileList } from './file-list.fixture.svelte';
 
-vi.mock('./api', () => ({
-	getContentLink: vi.fn(),
-	listFiles: vi.fn(),
-	searchFiles: vi.fn()
-}));
+const listFiles = vi.fn<typeof listFilesOperation>();
+const api = { listFiles, searchFiles: vi.fn<typeof searchFilesOperation>() };
 
 const file = (id: string, deletedAt: string | null = null): DashboardFile => ({
 	id,
@@ -57,7 +58,7 @@ describe('createFileList view transitions', () => {
 		const trash = listing([]);
 		const pending = Promise.withResolvers<FileListPayload>();
 		vi.mocked(listFiles).mockReturnValueOnce(pending.promise);
-		const { files, dispose, setTrash } = setupFileList(active);
+		const { files, dispose, setTrash } = setupFileList(active, false, api);
 
 		try {
 			await vi.waitFor(() => expect(files.list.loading).toBe(false));
@@ -91,7 +92,7 @@ describe('createFileList view transitions', () => {
 		const active = listing([file('active')]);
 		const pending = Promise.withResolvers<FileListPayload>();
 		vi.mocked(listFiles).mockReturnValueOnce(pending.promise);
-		const { files, dispose, setTrash } = setupFileList(trash, true);
+		const { files, dispose, setTrash } = setupFileList(trash, true, api);
 
 		try {
 			await vi.waitFor(() => expect(files.list.loading).toBe(false));
@@ -122,7 +123,7 @@ describe('createFileList view transitions', () => {
 		vi.mocked(listFiles)
 			.mockReturnValueOnce(pendingTrash.promise)
 			.mockReturnValueOnce(pendingActive.promise);
-		const { files, dispose, setTrash } = setupFileList(initial);
+		const { files, dispose, setTrash } = setupFileList(initial, false, api);
 
 		try {
 			await vi.waitFor(() => expect(files.list.loading).toBe(false));

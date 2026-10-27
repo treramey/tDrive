@@ -13,7 +13,9 @@ export const assertSecureUrl = (
 	label: string
 ) => {
 	if (url.protocol === 'https:') return;
+
 	if (url.protocol === 'http:' && isLocalHostname(url.hostname)) return;
+
 	if (url.protocol === 'http:' && allowHttp) return;
 	throw new Error(
 		`${label} must use https (or http on localhost). ` +
@@ -23,6 +25,7 @@ export const assertSecureUrl = (
 
 export const normalizeEndpoint = (value: string, allowHttp: boolean) => {
 	const url = new URL(value);
+
 	if (
 		!['http:', 'https:'].includes(url.protocol) ||
 		url.pathname !== '/' ||
@@ -31,7 +34,9 @@ export const normalizeEndpoint = (value: string, allowHttp: boolean) => {
 	) {
 		throw new Error('The server URL must be an http(s) origin without a path');
 	}
+
 	assertSecureUrl(url, allowHttp, 'The server URL');
+
 	return url.origin;
 };
 
@@ -45,15 +50,18 @@ export const assertTrustedServerUrl = (
 ) => {
 	const url = new URL(value);
 	assertSecureUrl(url, config.allowHttp === true, label);
+
 	const trusted = [config.endpoint, config.contentOrigin].filter(
-		(origin): origin is string => typeof origin === 'string'
+		(origin): origin is string => origin !== undefined
 	);
+
 	if (!trusted.includes(url.origin)) {
 		throw new Error(
 			`${label} points at an unexpected origin (${url.origin}). ` +
 				'Re-run `tdrive login` if the server moved.'
 		);
 	}
+
 	return value;
 };
 

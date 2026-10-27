@@ -12,20 +12,26 @@ export const POST: RequestHandler = ({ request, getClientAddress }) =>
 		Effect.gen(function* () {
 			const auth = yield* Auth;
 			const authGuard = yield* AuthGuard;
+
 			const rateLimit = yield* authGuard.consume(
 				'devicePoll',
 				getClientAddress()
 			);
+
 			if (!rateLimit.allowed) return authRateLimitResponse(rateLimit);
+
 			const input = yield* decodeJson(
 				request,
 				DeviceTokenRequestSchema,
 				'A device code is required'
 			);
+
 			const result = yield* auth.pollDevice(input.deviceCode);
+
 			if (result.status === 'complete') {
 				return Response.json({ apiKey: result.apiKey });
 			}
+
 			return Response.json(
 				{ status: result.status },
 				{

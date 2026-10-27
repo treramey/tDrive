@@ -1,4 +1,4 @@
-import { Effect, Schema } from 'effect';
+import { Effect, Schema, Option } from 'effect';
 import {
 	HttpBody,
 	HttpClientRequest,
@@ -15,15 +15,7 @@ export const apiRequest = (
 		readonly headers?: Readonly<Record<string, string>>;
 	} = {}
 ) =>
-	(method === 'GET'
-		? HttpClientRequest.get
-		: method === 'POST'
-			? HttpClientRequest.post
-			: method === 'PATCH'
-				? HttpClientRequest.patch
-				: method === 'DELETE'
-					? HttpClientRequest.delete
-					: HttpClientRequest.put)(url, {
+	HttpClientRequest.make(method)(url, {
 		body: options.body,
 		headers: {
 			// Without an explicit accept, SvelteKit negotiates API errors
@@ -38,31 +30,35 @@ export const apiRequest = (
 const statusHint = (status: number) => {
 	if (status === 401)
 		return 'Not signed in or the credential was rejected. Run `tdrive login <server-url>`.';
+
 	if (status === 403) return 'This credential is not allowed to do that.';
+
 	if (status === 404) return 'Not found.';
+
 	if (status === 413) return 'That is too large for this drive.';
+
 	if (status === 429) return 'Too many requests — wait a moment and retry.';
+
 	if (status >= 500)
 		return 'The server hit an unexpected error. Try again shortly.';
+
 	if (status >= 400) return 'The request was rejected.';
+
 	return `Unexpected response (${status}).`;
 };
 
 const messageFromBody = (body: string): string | undefined => {
 	try {
-		const value: unknown = JSON.parse(body);
-		if (
-			typeof value === 'object' &&
-			value !== null &&
-			'message' in value &&
-			typeof value.message === 'string' &&
-			value.message.trim() !== ''
-		) {
-			return value.message;
-		}
+		const value = Schema.decodeUnknownOption(
+			Schema.Struct({ message: Schema.String })
+		)(JSON.parse(body));
+
+		if (Option.isSome(value) && value.value.message.trim() !== '')
+			return value.value.message;
 	} catch {
 		// Non-JSON body (e.g. an HTML error page); ignore.
 	}
+
 	return undefined;
 };
 
@@ -73,6 +69,7 @@ const messageFromBody = (body: string): string | undefined => {
 const redactUrl = (raw: string) => {
 	try {
 		const url = new URL(raw);
+
 		return `${url.origin}${url.pathname}`;
 	} catch {
 		return raw.split('?')[0] ?? raw;

@@ -1,37 +1,55 @@
-import { Cause, Effect, Exit } from 'effect';
+import { Cause, Effect, Exit, Match } from 'effect';
 import { isAppError, runWorkerProgram, type AppServices } from '../edge';
 import type { AppError } from '../errors';
 import { requestLayer } from '../layer';
 import { Indexing } from '../services/indexing';
 
 export type McpRunSuccess<A> = { readonly ok: true; readonly value: A };
+
 export type McpRunFailure = {
 	readonly ok: false;
 	readonly message: string;
 	readonly status: number;
 };
+
 export type McpRunResult<A> = McpRunSuccess<A> | McpRunFailure;
 
 export const failureFromAppError = (failure: AppError): McpRunFailure => {
-	switch (failure._tag) {
-		case 'InvalidRequest':
-			return { ok: false, message: failure.message, status: failure.status };
-		case 'MisdirectedRequest':
-			return { ok: false, message: failure.message, status: 421 };
-		case 'Unauthorized':
-			return { ok: false, message: failure.message, status: 401 };
-		case 'NotFound':
-			return { ok: false, message: 'Not found', status: 404 };
-		case 'StorageError':
-			return { ok: false, message: 'Storage unavailable', status: 502 };
-	}
+	return Match.value(failure).pipe(
+		Match.tag('InvalidRequest', (value) => ({
+			ok: false as const,
+			message: value.message,
+			status: value.status
+		})),
+		Match.tag('MisdirectedRequest', (value) => ({
+			ok: false as const,
+			message: value.message,
+			status: 421
+		})),
+		Match.tag('Unauthorized', (value) => ({
+			ok: false as const,
+			message: value.message,
+			status: 401
+		})),
+		Match.tag('NotFound', () => ({
+			ok: false as const,
+			message: 'Not found',
+			status: 404
+		})),
+		Match.tag('StorageError', () => ({
+			ok: false as const,
+			message: 'Storage unavailable',
+			status: 502
+		})),
+		Match.exhaustive
+	);
 };
 
 export const failureFromCause = (
 	cause: Cause.Cause<unknown>
 ): McpRunFailure => {
 	const dieDefects = cause.reasons
-		.filter((reason) => reason._tag === 'Die')
+		.filter(Cause.isDieReason)
 		.map((reason) => reason.defect);
 
 	if (dieDefects.some((defect) => !isAppError(defect))) {
@@ -39,11 +57,14 @@ export const failureFromCause = (
 	}
 
 	const appDefect = dieDefects.find(isAppError);
+
 	if (appDefect) return failureFromAppError(appDefect);
 
 	for (const reason of cause.reasons) {
-		if (reason._tag !== 'Fail') continue;
+		if (!Cause.isFailReason(reason)) continue;
+
 		if (!isAppError(reason.error)) continue;
+
 		return failureFromAppError(reason.error);
 	}
 
@@ -57,7 +78,9 @@ export const runMcp = async <A, E>(
 	const exit = await Effect.runPromiseExit(
 		program.pipe(Effect.provide(requestLayer(env)))
 	);
+
 	if (Exit.isSuccess(exit)) return { ok: true, value: exit.value };
+
 	return failureFromCause(exit.cause);
 };
 

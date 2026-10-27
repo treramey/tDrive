@@ -16,6 +16,7 @@ export const listingMode = (
 ): ListingMode => {
 	if (view === 'trash') return { kind: 'list', trashed: true };
 	const trimmed = (query ?? '').trim();
+
 	return trimmed || tags.length > 0
 		? { kind: 'search', query: trimmed, tags }
 		: { kind: 'list', trashed: false };

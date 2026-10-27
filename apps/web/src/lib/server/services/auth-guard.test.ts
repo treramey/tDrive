@@ -2,10 +2,10 @@ import { Effect, Layer } from 'effect';
 import { describe, expect, it } from 'vitest';
 import { authRateLimitResponse } from '../auth-rate-limit-response';
 import { StorageError } from '../errors';
-import { AuthGuard, AuthGuardLive, type AuthGuardShape } from './auth-guard';
-import { AuthGuardStore, type AuthGuardStoreShape } from './bindings';
+import { AuthGuard, AuthGuardLive, type AuthGuardService } from './auth-guard';
+import { AuthGuardStore, type AuthGuardStoreService } from './bindings';
 
-class MemoryAuthGuardStore implements AuthGuardStoreShape {
+class MemoryAuthGuardStore implements AuthGuardStoreService {
 	readonly values = new Map<string, string>();
 	readonly ttls = new Map<string, number>();
 
@@ -32,17 +32,23 @@ const setup = () => {
 	const store = new MemoryAuthGuardStore();
 	let nowMs = Date.parse('2026-07-30T12:00:00.000Z');
 	const bindings = Layer.succeed(AuthGuardStore, store);
+
 	const layer = AuthGuardLive(() => new Date(nowMs)).pipe(
 		Layer.provide(bindings)
 	);
+
 	const run = <A, E>(program: Effect.Effect<A, E, AuthGuard>) =>
 		Effect.runPromise(program.pipe(Effect.provide(layer)));
-	const guard = <A, E>(use: (service: AuthGuardShape) => Effect.Effect<A, E>) =>
+
+	const guard = <A, E>(
+		use: (service: AuthGuardService) => Effect.Effect<A, E>
+	) =>
 		run(
 			Effect.gen(function* () {
 				return yield* use(yield* AuthGuard);
 			})
 		);
+
 	return {
 		store,
 		guard,
@@ -55,6 +61,7 @@ const setup = () => {
 describe('KV auth guard', () => {
 	it('limits passcode login attempts within a fixed window', async () => {
 		const { guard } = setup();
+
 		for (let attempt = 1; attempt <= 10; attempt += 1) {
 			await expect(
 				guard((service) => service.consume('passcodeLogin', '203.0.113.8'))
@@ -75,9 +82,11 @@ describe('KV auth guard', () => {
 
 	it('resets counters after the policy window and isolates clients', async () => {
 		const { guard, advance } = setup();
+
 		for (let attempt = 0; attempt < 5; attempt += 1) {
 			await guard((service) => service.consume('deviceCreate', '198.51.100.1'));
 		}
+
 		await expect(
 			guard((service) => service.consume('deviceCreate', '198.51.100.1'))
 		).resolves.toMatchObject({ allowed: false });
@@ -93,6 +102,7 @@ describe('KV auth guard', () => {
 
 	it('locks a client after five bad passcodes and clears failures on success', async () => {
 		const { guard } = setup();
+
 		for (let failure = 1; failure < 5; failure += 1) {
 			await expect(
 				guard((service) => service.recordPasscodeFailure('192.0.2.40'))
@@ -139,18 +149,21 @@ describe('KV auth guard', () => {
 	});
 
 	it('fails closed when KV operations fail', async () => {
-		const brokenStore: AuthGuardStoreShape = {
+		const brokenStore: AuthGuardStoreService = {
 			get: async () => {
 				throw new Error('KV unavailable');
 			},
 			put: async () => {},
 			delete: async () => {}
 		};
+
 		const layer = AuthGuardLive().pipe(
 			Layer.provide(Layer.succeed(AuthGuardStore, brokenStore))
 		);
+
 		const program = Effect.gen(function* () {
 			const service = yield* AuthGuard;
+
 			return yield* service.consume('passcodeLogin', '203.0.113.9');
 		}).pipe(Effect.provide(layer));
 
@@ -160,18 +173,21 @@ describe('KV auth guard', () => {
 	});
 
 	it('turns a contended KV write into a temporary rate limit', async () => {
-		const contendedStore: AuthGuardStoreShape = {
+		const contendedStore: AuthGuardStoreService = {
 			get: async () => null,
 			put: async () => {
 				throw new Error('429: one write per second');
 			},
 			delete: async () => {}
 		};
+
 		const layer = AuthGuardLive().pipe(
 			Layer.provide(Layer.succeed(AuthGuardStore, contendedStore))
 		);
+
 		const program = Effect.gen(function* () {
 			const service = yield* AuthGuard;
+
 			return yield* service.consume('passcodeLogin', '203.0.113.10');
 		}).pipe(Effect.provide(layer));
 
@@ -189,6 +205,7 @@ describe('KV auth guard', () => {
 			retryAfterSeconds: 90,
 			resetAtMs: Date.now() + 90_000
 		});
+
 		expect(response.status).toBe(429);
 		expect(response.headers.get('retry-after')).toBe('90');
 		expect(response.headers.get('cache-control')).toBe('private, no-store');

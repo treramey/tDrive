@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { spawn } from 'node:child_process';
-import { Console, Effect } from 'effect';
+import { Console, Effect, Schema, Option } from 'effect';
 import { Command, Flag } from 'effect/unstable/cli';
 import { CliFailure } from '../errors.ts';
 import { emit, wantsJson } from '../output.ts';
@@ -14,25 +14,33 @@ const CLI_TAG_PREFIX = 'cli-v';
 // prerelease identifiers compare numerically when both numeric, else
 // lexically, per semver.org #11).
 export const compareSemver = (left: string, right: string) => {
-	const [leftCore, leftPre = ''] = left.split(/-(.*)/s) as [string, string?];
-	const [rightCore, rightPre = ''] = right.split(/-(.*)/s) as [string, string?];
+	const [leftCore = '', leftPre = ''] = left.split(/-(.*)/s);
+	const [rightCore = '', rightPre = ''] = right.split(/-(.*)/s);
 	const parseCore = (value: string) => value.split('.').map(Number);
 	const [lMajor = 0, lMinor = 0, lPatch = 0] = parseCore(leftCore);
 	const [rMajor = 0, rMinor = 0, rPatch = 0] = parseCore(rightCore);
 	const core = lMajor - rMajor || lMinor - rMinor || lPatch - rPatch;
+
 	if (core !== 0) return core;
+
 	if (leftPre === rightPre) return 0;
+
 	if (leftPre === '') return 1; // release > any prerelease
+
 	if (rightPre === '') return -1;
 	const leftIds = leftPre.split('.');
 	const rightIds = rightPre.split('.');
+
 	for (let i = 0; i < Math.max(leftIds.length, rightIds.length); i += 1) {
 		const l = leftIds[i];
 		const r = rightIds[i];
+
 		if (l === undefined) return -1; // shorter prerelease sorts first
+
 		if (r === undefined) return 1;
 		const lNum = /^\d+$/.test(l) ? Number(l) : null;
 		const rNum = /^\d+$/.test(r) ? Number(r) : null;
+
 		if (lNum !== null && rNum !== null) {
 			if (lNum !== rNum) return lNum - rNum;
 		} else if (lNum !== null) {
@@ -43,6 +51,7 @@ export const compareSemver = (left: string, right: string) => {
 			return l < r ? -1 : 1;
 		}
 	}
+
 	return 0;
 };
 
@@ -61,6 +70,7 @@ export const upgrade = Command.make(
 						'This CLI is running from source; update with `git pull` instead.'
 				});
 			}
+
 			// /releases/latest returns the newest release of ANY kind; the CLI
 			// shares its repo with the app, so list releases and pick the
 			// newest cli-v* tag instead.
@@ -70,21 +80,25 @@ export const upgrade = Command.make(
 						`https://api.github.com/repos/${RELEASES_REPO}/releases?per_page=100`,
 						{ headers: { accept: 'application/vnd.github+json' } }
 					);
+
 					if (!response.ok) {
 						throw new Error(`GitHub returned ${response.status}`);
 					}
+
 					const body: unknown = await response.json();
+
 					if (!Array.isArray(body)) {
 						throw new Error('Release list response was not an array');
 					}
+
 					const tags = body
-						.map((entry: unknown) =>
-							typeof entry === 'object' &&
-							entry !== null &&
-							'tag_name' in entry &&
-							typeof entry.tag_name === 'string'
-								? entry.tag_name
-								: null
+						.map((entry) =>
+							Schema.decodeUnknownOption(
+								Schema.Struct({ tag_name: Schema.String })
+							)(entry)
+						)
+						.map((entry) =>
+							Option.isSome(entry) ? entry.value.tag_name : null
 						)
 						.filter(
 							(tag): tag is string =>
@@ -95,9 +109,11 @@ export const upgrade = Command.make(
 									? tag.startsWith(CLI_TAG_PREFIX)
 									: /^cli-v\d+\.\d+\.\d+$/.test(tag))
 						);
+
 					if (tags.length === 0) {
 						throw new Error('No CLI releases found');
 					}
+
 					const newest = tags.reduce((best, tag) =>
 						compareSemver(
 							tag.slice(CLI_TAG_PREFIX.length),
@@ -106,6 +122,7 @@ export const upgrade = Command.make(
 							? tag
 							: best
 					);
+
 					return { tag: newest };
 				},
 				catch: (cause) =>
@@ -117,28 +134,35 @@ export const upgrade = Command.make(
 						cause
 					})
 			});
+
 			const latest = release.tag.slice(CLI_TAG_PREFIX.length);
+
 			if (compareSemver(latest, CLI_VERSION) <= 0) {
 				yield* emit(
 					wantsJson()
 						? { status: 'current', version: CLI_VERSION, latest }
 						: `tdrive v${CLI_VERSION} is up to date`
 				);
+
 				return;
 			}
+
 			if (check) {
 				yield* emit(
 					wantsJson()
 						? { status: 'outdated', version: CLI_VERSION, latest }
 						: `tdrive v${latest} is available (installed: v${CLI_VERSION}). Run \`tdrive upgrade\` to install it.`
 				);
+
 				return;
 			}
+
 			// JSON mode stays machine-parseable: suppress human narration and
 			// the installer's own stdout, then emit a single result line.
 			if (!wantsJson()) {
 				yield* Console.log(`Upgrading tdrive v${CLI_VERSION} -> v${latest}…`);
 			}
+
 			// Reuse the blessed installer so upgrade and fresh install can
 			// never drift. The installer is verified against the release's
 			// checksums.txt before executing — it runs with the user's shell,
@@ -146,38 +170,49 @@ export const upgrade = Command.make(
 			const script = yield* Effect.tryPromise({
 				try: async () => {
 					const base = `https://github.com/${RELEASES_REPO}/releases/download/${release.tag}`;
+
 					const [scriptResponse, checksumResponse] = await Promise.all([
 						fetch(`${base}/install-cli.sh`),
 						fetch(`${base}/checksums.txt`)
 					]);
+
 					if (!scriptResponse.ok) {
 						throw new Error(
 							`installer download returned ${scriptResponse.status}`
 						);
 					}
+
 					if (!checksumResponse.ok) {
 						throw new Error(
 							`checksums download returned ${checksumResponse.status}`
 						);
 					}
+
 					const scriptBytes = new Uint8Array(
 						await scriptResponse.arrayBuffer()
 					);
+
 					const checksums = await checksumResponse.text();
+
 					const expected = checksums
 						.split('\n')
 						.map((line) => line.trim().split(/\s+/))
 						.find((parts) => parts[1] === 'install-cli.sh')?.[0];
+
 					if (!expected) {
 						throw new Error('checksums.txt has no entry for install-cli.sh');
 					}
+
 					const digest = await crypto.subtle.digest('SHA-256', scriptBytes);
+
 					const actual = Array.from(new Uint8Array(digest), (byte) =>
 						byte.toString(16).padStart(2, '0')
 					).join('');
+
 					if (actual !== expected) {
 						throw new Error('installer checksum mismatch; aborting');
 					}
+
 					return new TextDecoder().decode(scriptBytes);
 				},
 				catch: (cause) =>
@@ -189,6 +224,7 @@ export const upgrade = Command.make(
 						cause
 					})
 			});
+
 			yield* Effect.tryPromise({
 				try: () =>
 					new Promise<void>((resolve, reject) => {
@@ -207,6 +243,7 @@ export const upgrade = Command.make(
 								TDRIVE_INSTALL_DIR: dirname(fileURLToPath(import.meta.url))
 							}
 						});
+
 						child.once('error', reject);
 						child.once('close', (status) =>
 							status === 0
@@ -224,6 +261,7 @@ export const upgrade = Command.make(
 						cause
 					})
 			});
+
 			if (wantsJson()) {
 				yield* emit({ status: 'upgraded', from: CLI_VERSION, to: latest });
 			}

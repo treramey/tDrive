@@ -23,6 +23,7 @@ describe('query embedding cache', () => {
 			put: vi.fn(async () => {}),
 			delete: vi.fn(async () => {})
 		};
+
 		const cache = new QueryEmbeddingCache(store, new Map());
 		cache.setMemory('orbit', vector);
 		await expect(cache.get('  orbit  ')).resolves.toEqual(vector);
@@ -31,6 +32,7 @@ describe('query embedding cache', () => {
 
 	it('hydrates memory from KV and writes both layers on store', async () => {
 		const values = new Map<string, string>();
+
 		const store = {
 			get: async (key: string) => values.get(key) ?? null,
 			put: async (
@@ -45,6 +47,7 @@ describe('query embedding cache', () => {
 				values.delete(key);
 			}
 		};
+
 		const cache = new QueryEmbeddingCache(store, new Map());
 		await cache.set('manifest', vector);
 		const key = await cache.digestKey('manifest');
@@ -69,6 +72,7 @@ describe('query embedding cache', () => {
 			},
 			new Map()
 		);
+
 		await cache.set('notes', vector);
 		await expect(cache.get('notes')).resolves.toEqual(vector);
 	});

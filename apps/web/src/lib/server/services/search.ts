@@ -38,18 +38,19 @@ export interface SearchInput {
 // cursor round-trips as "o:<page>".
 const PAGE_SIZE = 50;
 const MAX_PAGE = 100;
+
 export interface SearchPage {
 	readonly files: ReadonlyArray<DashboardFile>;
 	readonly nextCursor: string | null;
 }
 
-export interface SearchShape {
+export interface SearchService {
 	readonly files: (
 		input: SearchInput
 	) => Effect.Effect<SearchPage, InvalidRequest | StorageError>;
 }
 
-export class Search extends Context.Service<Search, SearchShape>()(
+export class Search extends Context.Service<Search, SearchService>()(
 	'app/Search'
 ) {}
 
@@ -57,6 +58,7 @@ const decodeCursor = (cursor: string | null | undefined) => {
 	if (!cursor) return 0;
 	const match = /^o:(\d+)$/.exec(cursor);
 	const page = match ? Number(match[1]) : Number.NaN;
+
 	return Number.isSafeInteger(page) && page >= 0 && page < MAX_PAGE
 		? page
 		: null;
@@ -76,7 +78,9 @@ const makeSearch = Effect.gen(function* () {
 					.prepare(command.sql)
 					.bind(...command.bindings)
 					.all<RankedRow>();
+
 				if (!result.success) throw new Error(result.error ?? 'Search failed');
+
 				return result.results;
 			},
 			catch: (cause) => new StorageError({ operation: 'search index', cause })
@@ -89,14 +93,17 @@ const makeSearch = Effect.gen(function* () {
 	) {
 		if (fileIds.length === 0) return [];
 		const command = eligibleSemanticCommand(fileIds, now, tagIds);
+
 		return yield* Effect.tryPromise({
 			try: async () => {
 				const result = await db
 					.prepare(command.sql)
 					.bind(...command.bindings)
 					.all<{ file_id: string; ordinal: number }>();
+
 				if (!result.success)
 					throw new Error(result.error ?? 'Semantic filtering failed');
+
 				return result.results.map((row) => ({ fileId: row.file_id }));
 			},
 			catch: (cause) =>
@@ -113,6 +120,7 @@ const makeSearch = Effect.gen(function* () {
 	) {
 		if (fileIds.length === 0) return [];
 		const idPlaceholders = fileIds.map(() => '?').join(', ');
+
 		const tagFilter =
 			tagIds.length === 0
 				? ''
@@ -121,6 +129,7 @@ const makeSearch = Effect.gen(function* () {
 					WHERE selected.file_id = f.id
 						AND selected.tag_id IN (${tagIds.map(() => '?').join(', ')})
 				)`;
+
 		const result = yield* Effect.tryPromise({
 			try: async () => {
 				const response = await db
@@ -134,20 +143,25 @@ const makeSearch = Effect.gen(function* () {
 					)
 					.bind(...fileIds, new Date().toISOString(), ...tagIds)
 					.all();
+
 				if (!response.success)
 					throw new Error(response.error ?? 'Hydration failed');
+
 				return response.results;
 			},
 			catch: (cause) =>
 				new StorageError({ operation: 'hydrate search results', cause })
 		});
+
 		const byId = new Map(
 			decodeDashboardRows(result)
 				.map(toDashboardFile)
 				.map((file) => [file.id, file])
 		);
+
 		return fileIds.flatMap((id) => {
 			const file = byId.get(id);
+
 			return file ? [file] : [];
 		});
 	});
@@ -165,6 +179,7 @@ const makeSearch = Effect.gen(function* () {
 					WHERE selected.file_id = f.id
 						AND selected.tag_id IN (${tagIds.map(() => '?').join(', ')})
 				)`;
+
 		const rows = yield* Effect.tryPromise({
 			try: async () => {
 				const response = await db
@@ -179,35 +194,42 @@ const makeSearch = Effect.gen(function* () {
 					)
 					.bind(new Date().toISOString(), ...tagIds, limit, offset)
 					.all();
+
 				if (!response.success)
 					throw new Error(response.error ?? 'File listing failed');
+
 				return response.results;
 			},
 			catch: (cause) =>
 				new StorageError({ operation: 'list filtered files', cause })
 		});
+
 		return decodeDashboardRows(rows).map(toDashboardFile);
 	});
 
 	return Search.of({
 		files: Effect.fn('Search.files')(function* ({ query, tagIds, cursor }) {
 			const page = decodeCursor(cursor ?? null);
+
 			if (page === null) {
 				return yield* new InvalidRequest({
 					status: 400,
 					message: 'Search cursor is invalid'
 				});
 			}
+
 			const offset = page * PAGE_SIZE;
 			const selectedTagIds = [...new Set(tagIds)].slice(0, 20);
 			const trimmedQuery = query.trim().slice(0, 256);
 			const keywordMatch = sanitizeMatchQuery(trimmedQuery);
+
 			if (!keywordMatch) {
 				const recent = yield* filteredRecent(
 					selectedTagIds,
 					PAGE_SIZE + 1,
 					offset
 				);
+
 				return {
 					files: recent.slice(0, PAGE_SIZE),
 					nextCursor:
@@ -219,6 +241,7 @@ const makeSearch = Effect.gen(function* () {
 
 			const trigramMatch = sanitizeTrigramQuery(trimmedQuery);
 			const now = new Date().toISOString();
+
 			// The index reads (FTS, trigram) and the optional embedding +
 			// vector query are independent; run them concurrently so search
 			// latency is the slowest source, not their sum. Workers AI
@@ -249,6 +272,7 @@ const makeSearch = Effect.gen(function* () {
 												operation: failure.operation
 											})
 										);
+
 										return [];
 									})
 								)
@@ -257,6 +281,7 @@ const makeSearch = Effect.gen(function* () {
 				],
 				{ concurrency: 'unbounded' }
 			);
+
 			const semantic = yield* filterSemantic(
 				semanticCandidates.map((candidate) => candidate.fileId),
 				selectedTagIds,
@@ -271,10 +296,12 @@ const makeSearch = Effect.gen(function* () {
 								operation: failure.operation
 							})
 						);
+
 						return [];
 					})
 				)
 			);
+
 			// Fuse the full candidate pool on every page so page 0 and
 			// page 1 slice the same ranking instead of two different
 			// prefixes (offset+51 vs offset+101).
@@ -295,11 +322,14 @@ const makeSearch = Effect.gen(function* () {
 				},
 				SEARCH_CANDIDATE_LIMIT
 			);
+
 			const visible = fused.slice(offset, offset + PAGE_SIZE);
+
 			const hydrated = yield* hydrate(
 				visible.map((entry) => entry.fileId),
 				selectedTagIds
 			);
+
 			return {
 				files: pinExactName(trimmedQuery, hydrated),
 				nextCursor:

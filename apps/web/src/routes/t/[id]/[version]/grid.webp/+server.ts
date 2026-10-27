@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { Effect } from 'effect';
+import { Effect, Predicate } from 'effect';
 import {
 	DASHBOARD_RENDERED_THUMBNAIL,
 	DASHBOARD_THUMBNAIL,
@@ -29,6 +29,7 @@ import { GrantSecrets } from '$lib/server/services/grant-secrets';
 
 const parsedVersion = (value: string) => {
 	const version = Number(value);
+
 	return Number.isSafeInteger(version) && version > 0 ? version : null;
 };
 
@@ -57,6 +58,7 @@ const publicThumbnailRedirect = (url: URL) => {
 	const location = new URL(url);
 	location.searchParams.delete('e');
 	location.searchParams.delete('g');
+
 	return new Response(null, {
 		status: 307,
 		headers: {
@@ -70,6 +72,7 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 	runEdge(
 		Effect.gen(function* () {
 			const version = parsedVersion(params.version);
+
 			if (version === null) return yield* new NotFound({ id: params.id });
 
 			const config = yield* AppConfig;
@@ -77,6 +80,7 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 			const grantSecrets = yield* GrantSecrets;
 			const expiresAtSeconds = Number(url.searchParams.get('e'));
 			const hasGrant = url.searchParams.has('e') && url.searchParams.has('g');
+
 			const resolved = yield* files
 				.findContent(params.id, version, false, true)
 				.pipe(
@@ -93,19 +97,24 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 							: Effect.fail(new NotFound({ id: params.id }))
 					)
 				);
+
 			const { content } = resolved;
+
 			const rendered = supportsRenderedDashboardThumbnail(
 				content.file.kind,
 				content.file.contentType
 			);
+
 			if (!rendered && !supportsDashboardThumbnail(content.file.contentType)) {
 				return yield* new NotFound({ id: params.id });
 			}
 
 			const redirectPublicGrant =
 				hasGrant && !resolved.unavailable && content.file.public;
+
 			const privateResponse =
 				hasGrant || resolved.unavailable || !content.file.public;
+
 			if (!content.file.public || hasGrant) {
 				const granted = yield* grantSecrets.verify({
 					contentOrigin: config.contentOrigin,
@@ -115,26 +124,32 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 					expiresAtSeconds,
 					signature: url.searchParams.get('g') ?? ''
 				});
+
 				if (!granted) return yield* new NotFound({ id: params.id });
 			}
+
 			const cacheControl = thumbnailCacheControl(
 				privateResponse,
 				expiresAtSeconds
 			);
 
 			const cacheRequest = pathCacheRequest(url);
+
 			if (!privateResponse && !redirectPublicGrant) {
 				const cachedResponse = yield* matchEdgeCache(platform, cacheRequest);
 				const cachedEtag = cachedResponse?.headers.get('ETag');
+
 				if (cachedResponse && cachedEtag) {
 					if (matchesEtag(request.headers.get('if-none-match'), cachedEtag)) {
 						return thumbnailNotModified(cachedEtag, cacheControl);
 					}
+
 					return cachedResponse;
 				}
 			}
 
 			const blobs = yield* Blobs;
+
 			const cached =
 				content.thumbnailR2Key === null
 					? { found: false as const }
@@ -144,8 +159,10 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 								Effect.succeed({ found: false as const })
 							)
 						);
+
 			if (cached.found) {
 				if (redirectPublicGrant) return publicThumbnailRedirect(url);
+
 				if (
 					matchesEtag(
 						request.headers.get('if-none-match'),
@@ -154,15 +171,19 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 				) {
 					return thumbnailNotModified(cached.object.httpEtag, cacheControl);
 				}
+
 				const response = thumbnailResponse(
 					cached.object.body,
 					cached.object.size,
 					cached.object.httpEtag,
 					cacheControl
 				);
+
 				if (!privateResponse) storeEdgeCache(platform, cacheRequest, response);
+
 				return response;
 			}
+
 			if (!hasGrant) return yield* new NotFound({ id: params.id });
 
 			const sourceGrant = yield* grantSecrets.mint({
@@ -171,6 +192,7 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 				version: content.file.version,
 				purpose: 'thumbnail-source'
 			});
+
 			const siteGrant =
 				content.file.kind === 'site'
 					? yield* grantSecrets.mint({
@@ -179,6 +201,7 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 							version: content.file.version
 						})
 					: null;
+
 			const sourceUrl = siteGrant
 				? dashboardSiteThumbnailSourceUrl(
 						config.contentOrigin,
@@ -202,6 +225,7 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 							signature: sourceGrant.signature
 						}
 					);
+
 			const bytes = yield* Effect.tryPromise({
 				try: async () => {
 					const response = rendered
@@ -215,14 +239,17 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 						: await fetch(sourceUrl, {
 								cf: { image: DASHBOARD_THUMBNAIL }
 							});
+
 					if (!response) {
 						throw new Error('Browser rendering binding is unavailable');
 					}
+
 					if (!response.ok) {
 						throw new Error(
 							`${rendered ? 'Screenshot' : 'Image transform'} returned ${response.status}`
 						);
 					}
+
 					if (
 						rendered
 							? !isWebpContentType(response.headers.get('content-type'))
@@ -233,16 +260,21 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 					) {
 						throw new Error('Image transform did not return transformed WebP');
 					}
+
 					const output = await response.arrayBuffer();
+
 					if (output.byteLength === 0) {
 						throw new Error('Image transform returned an empty response');
 					}
+
 					return output;
 				},
 				catch: (cause) =>
 					new StorageError({ operation: 'generate dashboard thumbnail', cause })
 			});
+
 			const body = new Response(bytes).body;
+
 			const result = yield* files.storeDashboardThumbnail(
 				params.id,
 				content.file.version,
@@ -250,25 +282,33 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 				bytes.byteLength,
 				content.thumbnailR2Key
 			);
-			if (result._tag === 'Existing') {
+
+			if (Predicate.isTagged(result, 'Existing')) {
 				if (redirectPublicGrant) return publicThumbnailRedirect(url);
 				const existing = yield* blobs.get(result.r2Key);
+
 				if (
 					matchesEtag(request.headers.get('if-none-match'), existing.httpEtag)
 				) {
 					return thumbnailNotModified(existing.httpEtag, cacheControl);
 				}
+
 				const response = thumbnailResponse(
 					existing.body,
 					existing.size,
 					existing.httpEtag,
 					cacheControl
 				);
+
 				if (!privateResponse) storeEdgeCache(platform, cacheRequest, response);
+
 				return response;
 			}
+
 			const stored = result.blob;
+
 			if (redirectPublicGrant) return publicThumbnailRedirect(url);
+
 			if (matchesEtag(request.headers.get('if-none-match'), stored.etag)) {
 				return thumbnailNotModified(stored.etag, cacheControl);
 			}
@@ -279,7 +319,9 @@ export const GET: RequestHandler = ({ params, platform, request, url }) =>
 				stored.etag,
 				cacheControl
 			);
+
 			if (!privateResponse) storeEdgeCache(platform, cacheRequest, response);
+
 			return response;
 		})
 	);

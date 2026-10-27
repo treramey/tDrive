@@ -1,3 +1,4 @@
+import * as z from 'zod/mini';
 // Fails when top-level and env.production wrangler config drift on values
 // that must stay in sync. Wrangler environments don't inherit, so the
 // production block redeclares everything — this guards the redeclarations.
@@ -14,37 +15,46 @@ export const stripComments = (source) => {
 	let i = 0;
 	let state = 'code';
 	let quote = '"';
+
 	while (i < source.length) {
 		const current = source[i];
 		const next = source[i + 1];
+
 		if (state === 'string') {
 			out += current;
+
 			if (current === '\\') {
 				out += next ?? '';
 				i += 2;
 				continue;
 			}
+
 			if (current === quote) state = 'code';
 			i += 1;
 			continue;
 		}
+
 		if (state === 'line') {
 			if (current === '\n') {
 				state = 'code';
 				out += current;
 			}
+
 			i += 1;
 			continue;
 		}
+
 		if (state === 'block') {
 			if (current === '*' && next === '/') {
 				state = 'code';
 				i += 2;
 				continue;
 			}
+
 			i += 1;
 			continue;
 		}
+
 		if (current === '"' || current === "'") {
 			state = 'string';
 			quote = current;
@@ -52,31 +62,39 @@ export const stripComments = (source) => {
 			i += 1;
 			continue;
 		}
+
 		if (current === '/' && next === '/') {
 			state = 'line';
 			i += 2;
 			continue;
 		}
+
 		if (current === '/' && next === '*') {
 			state = 'block';
 			i += 2;
 			continue;
 		}
+
 		out += current;
 		i += 1;
 	}
+
 	return out;
 };
 
 const normalize = (value) => {
 	if (Array.isArray(value)) return value.map(normalize);
-	if (value && typeof value === 'object') {
+
+	const record = z.record(z.string(), z.unknown()).safeParse(value);
+
+	if (record.success) {
 		return Object.fromEntries(
 			Object.keys(value)
 				.sort()
 				.map((key) => [key, normalize(value[key])])
 		);
 	}
+
 	return value;
 };
 
@@ -91,6 +109,7 @@ const placeholderIds = (block, label, drift) => {
 			);
 		}
 	}
+
 	for (const entry of block.kv_namespaces ?? []) {
 		if (String(entry.id ?? '').includes('replace-with-')) {
 			drift.push(
@@ -102,18 +121,23 @@ const placeholderIds = (block, label, drift) => {
 
 const main = () => {
 	const envFlag = process.argv.indexOf('--env');
+
 	const envName =
 		envFlag >= 0 && process.argv[envFlag + 1]
 			? process.argv[envFlag + 1]
 			: 'production';
+
 	const placeholdersOnly = process.argv.includes('--placeholders-only');
 	const config = JSON.parse(stripComments(readFileSync(configPath, 'utf8')));
 	const prod = config.env?.[envName];
-	if (!prod || typeof prod !== 'object' || Array.isArray(prod)) {
+
+	if (!z.looseObject({}).safeParse(prod).success) {
 		console.error(`wrangler.jsonc does not define env.${envName}.`);
 		process.exitCode = 1;
+
 		return;
 	}
+
 	const drift = [];
 
 	placeholderIds(prod, `env.${envName}`, drift);
@@ -124,12 +148,15 @@ const main = () => {
 			'DASHBOARD_ORIGIN',
 			'CONTENT_ORIGIN'
 		]);
+
 		const localVars = { ...config.vars };
 		const prodVars = { ...prod.vars };
+
 		for (const key of ENV_ONLY_VARS) {
 			delete localVars[key];
 			delete prodVars[key];
 		}
+
 		if (!sameJson(localVars, prodVars)) {
 			for (const key of new Set([
 				...Object.keys(localVars),
@@ -142,6 +169,7 @@ const main = () => {
 				}
 			}
 		}
+
 		for (const key of ['DASHBOARD_ORIGIN', 'CONTENT_ORIGIN']) {
 			if (!config.vars?.[key] || !prod.vars?.[key]) {
 				drift.push(
@@ -149,11 +177,13 @@ const main = () => {
 				);
 			}
 		}
+
 		if (config.vars?.SEMANTIC_SEARCH !== 'auto') {
 			drift.push(
 				`vars.SEMANTIC_SEARCH: local must be "auto" (got ${JSON.stringify(config.vars?.SEMANTIC_SEARCH)})`
 			);
 		}
+
 		if (prod.vars?.SEMANTIC_SEARCH !== 'required') {
 			drift.push(
 				`vars.SEMANTIC_SEARCH: env.${envName} must be "required" (got ${JSON.stringify(prod.vars?.SEMANTIC_SEARCH)})`
@@ -170,6 +200,7 @@ const main = () => {
 
 		const bindingNames = (entries) =>
 			(entries ?? []).map((entry) => entry.binding).sort();
+
 		for (const key of ['d1_databases', 'r2_buckets', 'kv_namespaces']) {
 			if (!sameJson(bindingNames(config[key]), bindingNames(prod[key]))) {
 				drift.push(
@@ -184,8 +215,10 @@ const main = () => {
 			`wrangler.jsonc drift between top level and env.${envName}:\n${drift.map((line) => `  - ${line}`).join('\n')}`
 		);
 		process.exitCode = 1;
+
 		return;
 	}
+
 	console.log(`No drift between top-level and env.${envName} wrangler config.`);
 };
 

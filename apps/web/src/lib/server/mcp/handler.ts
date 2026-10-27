@@ -13,6 +13,7 @@ import { createTdriveMcpServer } from './server';
 
 export const mcpAllowedHostnames = (dashboardOrigin: string) => {
 	const hostname = new URL(dashboardOrigin).hostname;
+
 	return [...new Set([hostname, 'localhost', '127.0.0.1'])];
 };
 
@@ -26,6 +27,7 @@ const handlerOptions = (dashboardOrigin: string) => ({
 export const handleMcpRequest = async (event: RequestEvent) => {
 	const env = event.platform?.env;
 	const ctx = event.platform?.ctx;
+
 	if (!env || !ctx) {
 		return new Response('Cloudflare bindings unavailable', { status: 500 });
 	}
@@ -41,9 +43,11 @@ export const handleMcpRequest = async (event: RequestEvent) => {
 		env,
 		Effect.gen(function* () {
 			const auth = yield* Auth;
+
 			return yield* authorizeMcp(auth, event.request, event.url);
 		})
 	);
+
 	if (!authorized.ok) {
 		return authorized.status === 401
 			? mcpUnauthorizedResponse(authorized.message)

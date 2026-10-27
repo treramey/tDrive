@@ -10,9 +10,11 @@
 	let apiKey = $state('');
 	let supported = $state(false);
 	const passkeyAttempt = new AbortController();
+
 	onMount(() => {
 		supported = passkeysSupported();
 	});
+
 	onDestroy(() => passkeyAttempt.abort());
 </script>
 

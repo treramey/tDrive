@@ -17,10 +17,12 @@ export const DELETE: RequestHandler = ({ cookies, request, url }) =>
 					message: 'The request origin is not allowed'
 				});
 			}
+
 			const auth = yield* Auth;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			const revoked = yield* auth.revokeAllSessions;
 			clearBrowserSession(cookies);
+
 			return Response.json(
 				{ revoked },
 				{ headers: { 'Cache-Control': 'private, no-store' } }

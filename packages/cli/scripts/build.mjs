@@ -6,6 +6,7 @@ import { chmod } from 'node:fs/promises';
 import { build } from 'esbuild';
 
 const version = process.env.TDRIVE_CLI_VERSION ?? '0.0.0-local';
+
 if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
 	console.error(`TDRIVE_CLI_VERSION is not a valid semver: ${version}`);
 	process.exit(1);

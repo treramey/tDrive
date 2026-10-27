@@ -1,6 +1,6 @@
 import { FileListResponseSchema } from '@tdrive/shared';
 import type { FileListResponse } from '@tdrive/shared';
-import { Effect, Schema } from 'effect';
+import { Effect, Schema, Option } from 'effect';
 import {
 	supportsDashboardThumbnail,
 	supportsRenderedDashboardThumbnail
@@ -27,12 +27,15 @@ const eligibleForThumbnailPreload = (file: FileListResponse['files'][number]) =>
 const thumbnailPreloadTargets = (list: FileListResponse) => {
 	if (!list.contentOrigin) return [];
 	const targets: Array<{ id: string; version: number }> = [];
+
 	for (const file of list.files) {
 		if (targets.length >= THUMBNAIL_PRELOAD_LIMIT) break;
+
 		if (eligibleForThumbnailPreload(file)) {
 			targets.push({ id: file.id, version: file.version });
 		}
 	}
+
 	return targets;
 };
 
@@ -45,11 +48,14 @@ const preloadUrls = (
 			`/t/${encodeURIComponent(target.id)}/${target.version}/grid.webp`,
 			list.contentOrigin
 		);
+
 		const grant = grants[index];
+
 		if (grant) {
 			url.searchParams.set('e', grant.expires);
 			url.searchParams.set('g', grant.signature);
 		}
+
 		return url.href;
 	});
 
@@ -63,7 +69,9 @@ const grantedThumbnailPreloads = async (
 	list: FileListResponse
 ) => {
 	const plain = preloadUrls(list, []);
+
 	if (plain.length === 0 || env === undefined) return plain;
+
 	try {
 		const minted = await runWorkerProgram(
 			env,
@@ -72,6 +80,7 @@ const grantedThumbnailPreloads = async (
 					Effect.gen(function* () {
 						const config = yield* AppConfig;
 						const secrets = yield* GrantSecrets;
+
 						return yield* secrets.mint({
 							contentOrigin: config.contentOrigin,
 							fileId: id,
@@ -82,6 +91,7 @@ const grantedThumbnailPreloads = async (
 				{ concurrency: 'unbounded' }
 			)
 		);
+
 		return preloadUrls(
 			list,
 			minted.map((grant) => ({
@@ -96,29 +106,27 @@ const grantedThumbnailPreloads = async (
 
 const readError = async (response: Response) => {
 	try {
-		const body: unknown = await response.json();
-		if (
-			typeof body === 'object' &&
-			body !== null &&
-			'message' in body &&
-			typeof body.message === 'string'
-		) {
-			return body.message;
-		}
+		const body = Schema.decodeUnknownOption(
+			Schema.Struct({ message: Schema.String })
+		)(await response.json());
+
+		if (Option.isSome(body)) return body.value.message;
 	} catch {
 		// The status fallback below is enough for non-JSON failures.
 	}
+
 	return `Could not load files (${response.status})`;
 };
 
 const tagIds = (url: URL) => {
 	const value = url.searchParams.get('tags');
+
 	if (!value) return [];
+
 	try {
 		const parsed: unknown = JSON.parse(value);
-		return Array.isArray(parsed)
-			? parsed.filter((tag): tag is string => typeof tag === 'string')
-			: [];
+
+		return Array.isArray(parsed) ? parsed.filter(Schema.is(Schema.String)) : [];
 	} catch {
 		return [];
 	}
@@ -131,25 +139,32 @@ export const load: PageServerLoad = async ({
 	url
 }) => {
 	depends('tdrive:files');
+
 	const mode = listingMode(
 		url.searchParams.get('view'),
 		url.searchParams.get('q') ?? '',
 		tagIds(url)
 	);
+
 	const params = new URLSearchParams();
+
 	if (mode.kind === 'list' && mode.trashed) {
 		params.set('trashed', 'true');
 	} else if (mode.kind === 'search') {
 		params.set('q', mode.query);
+
 		for (const tag of mode.tags.slice(0, 20)) {
 			params.append('tag', tag);
 		}
 	}
+
 	const path =
 		mode.kind === 'list'
 			? `/api/files${params.size > 0 ? `?${params}` : ''}`
 			: `/api/search?${params}`;
+
 	let response: Response;
+
 	try {
 		response = await fetch(path);
 	} catch {
@@ -159,6 +174,7 @@ export const load: PageServerLoad = async ({
 			thumbnailPreloads: []
 		};
 	}
+
 	if (response.status === 401) {
 		return {
 			initialList: null,
@@ -166,6 +182,7 @@ export const load: PageServerLoad = async ({
 			thumbnailPreloads: []
 		};
 	}
+
 	if (!response.ok) {
 		return {
 			initialList: null,
@@ -173,10 +190,12 @@ export const load: PageServerLoad = async ({
 			thumbnailPreloads: []
 		};
 	}
+
 	try {
 		const initialList = await Schema.decodeUnknownPromise(
 			FileListResponseSchema
 		)(await response.json());
+
 		return {
 			initialList,
 			initialError: '',

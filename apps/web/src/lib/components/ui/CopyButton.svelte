@@ -52,6 +52,7 @@
 	const run = async () => {
 		try {
 			await copyText(await resolve());
+
 			if (timer) clearTimeout(timer);
 			copied = true;
 			timer = setTimeout(() => {

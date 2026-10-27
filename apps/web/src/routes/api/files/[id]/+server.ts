@@ -1,6 +1,6 @@
 import { FileMutationSchema } from '@tdrive/shared';
 import type { RequestHandler } from './$types';
-import { Effect } from 'effect';
+import { Effect, Match } from 'effect';
 import { runEdge, runEdgeWithEvent, runWorkerProgram } from '$lib/server/edge';
 import { AppConfig } from '$lib/server/config';
 import { validateExpiration } from '$lib/server/auth-policy';
@@ -28,6 +28,7 @@ export const GET: RequestHandler = ({ cookies, params, request, url }) =>
 			const indexing = yield* Indexing;
 			const config = yield* AppConfig;
 			yield* authorizeRequest(auth, request, url, cookies);
+
 			// File detail, tag list, and indexing status are independent D1
 			// reads; run them concurrently like the list and search routes.
 			const [detail, tagList, semantic] = yield* Effect.all(
@@ -51,6 +52,7 @@ export const GET: RequestHandler = ({ cookies, params, request, url }) =>
 				],
 				{ concurrency: 'unbounded' }
 			);
+
 			return Response.json({
 				...detail,
 				availableTags: tagList,
@@ -63,6 +65,7 @@ export const GET: RequestHandler = ({ cookies, params, request, url }) =>
 
 export const PATCH: RequestHandler = async (event) => {
 	const { cookies, params, request, url } = event;
+
 	const output = await runEdgeWithEvent(
 		event,
 		Effect.gen(function* () {
@@ -71,40 +74,47 @@ export const PATCH: RequestHandler = async (event) => {
 			const indexing = yield* Indexing;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			const mutation = yield* readMutation(request);
-			const result =
-				mutation.action === 'visibility'
-					? yield* files.setVisibility(params.id, mutation.public)
-					: mutation.action === 'trash'
-						? yield* files.trash(params.id)
-						: mutation.action === 'restore'
-							? yield* files.restore(params.id)
-							: mutation.action === 'expiration'
-								? yield* files.setExpiration(
-										params.id,
-										yield* Effect.try({
-											try: () => validateExpiration(mutation.expiresAt),
-											catch: (cause) =>
-												cause instanceof InvalidRequest
-													? cause
-													: new InvalidRequest({
-															status: 400,
-															message: 'Expiration is invalid'
-														})
-										})
-									)
-								: mutation.action === 'rename'
-									? yield* files.rename(params.id, mutation.displayName)
-									: mutation.action === 'restore-version'
-										? yield* files.restoreVersion(params.id, mutation.version)
-										: mutation.action === 'purge'
-											? yield* files.schedulePurgeNow(params.id)
-											: yield* indexing.enqueue(params.id).pipe(
-													Effect.andThen(files.detail(params.id)),
-													Effect.map((detail) => ({
-														file: detail.file,
-														forcedPublic: false
-													}))
-												);
+
+			const result = yield* Match.value(mutation).pipe(
+				Match.when({ action: 'visibility' }, (input) =>
+					files.setVisibility(params.id, input.public)
+				),
+				Match.when({ action: 'trash' }, () => files.trash(params.id)),
+				Match.when({ action: 'restore' }, () => files.restore(params.id)),
+				Match.when({ action: 'expiration' }, (input) =>
+					Effect.try({
+						try: () => validateExpiration(input.expiresAt),
+						catch: (cause) =>
+							cause instanceof InvalidRequest
+								? cause
+								: new InvalidRequest({
+										status: 400,
+										message: 'Expiration is invalid'
+									})
+					}).pipe(
+						Effect.flatMap((expiresAt) =>
+							files.setExpiration(params.id, expiresAt)
+						)
+					)
+				),
+				Match.when({ action: 'rename' }, (input) =>
+					files.rename(params.id, input.displayName)
+				),
+				Match.when({ action: 'restore-version' }, (input) =>
+					files.restoreVersion(params.id, input.version)
+				),
+				Match.when({ action: 'purge' }, () =>
+					files.schedulePurgeNow(params.id)
+				),
+				Match.when({ action: 'reindex' }, () =>
+					indexing.enqueue(params.id).pipe(
+						Effect.andThen(files.detail(params.id)),
+						Effect.map((detail) => ({ file: detail.file, forcedPublic: false }))
+					)
+				),
+				Match.exhaustive
+			);
+
 			return {
 				reindex:
 					mutation.action === 'reindex' ||
@@ -115,6 +125,7 @@ export const PATCH: RequestHandler = async (event) => {
 			};
 		})
 	);
+
 	if (output.reindex && event.platform) {
 		event.platform.ctx.waitUntil(
 			runWorkerProgram(
@@ -126,6 +137,7 @@ export const PATCH: RequestHandler = async (event) => {
 			)
 		);
 	}
+
 	if (output.purge && event.platform) {
 		event.platform.ctx.waitUntil(
 			runWorkerProgram(
@@ -137,5 +149,6 @@ export const PATCH: RequestHandler = async (event) => {
 			)
 		);
 	}
+
 	return output.response;
 };

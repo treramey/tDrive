@@ -10,18 +10,20 @@ import { purgeOps } from './files/purge';
 import { queryOps } from './files/queries';
 import { thumbnailOps } from './files/thumbnails';
 import { uploadOps } from './files/upload';
-import type { FilesShape } from './files/types';
+import type { FilesService } from './files/types';
 
 export type {
 	DashboardThumbnailStoreResult,
 	FileContent,
-	FilesShape,
+	FilesService,
 	ListPage,
 	MutationResult,
 	UploadResult
 } from './files/types';
 
-export class Files extends Context.Service<Files, FilesShape>()('app/Files') {}
+export class Files extends Context.Service<Files, FilesService>()(
+	'app/Files'
+) {}
 
 const makeFiles = Effect.gen(function* () {
 	const db = yield* Db;

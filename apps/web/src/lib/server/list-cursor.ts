@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Schema, Option } from 'effect';
 import { InvalidRequest } from './errors';
 
 const CursorState = Schema.Struct({
@@ -22,6 +22,7 @@ const fromBase64Url = (value: string) => {
 		.replaceAll('-', '+')
 		.replaceAll('_', '/')
 		.padEnd(Math.ceil(value.length / 4) * 4, '=');
+
 	return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
 };
 
@@ -30,13 +31,17 @@ export const encodeListCursor = (cursor: ListCursor) =>
 
 export const decodeListCursor = (value: string | null): ListCursor | null => {
 	if (value === null || value === '') return null;
+
 	if (value.length > 512) {
 		throw new InvalidRequest({ status: 400, message: 'Cursor is invalid' });
 	}
+
 	try {
 		const parsed: unknown = JSON.parse(decoder.decode(fromBase64Url(value)));
 		const decoded = Schema.decodeUnknownOption(CursorState)(parsed);
-		if (decoded._tag === 'None') throw new Error('shape');
+
+		if (Option.isNone(decoded)) throw new Error('shape');
+
 		return decoded.value;
 	} catch {
 		throw new InvalidRequest({ status: 400, message: 'Cursor is invalid' });
@@ -50,11 +55,13 @@ export const parsePageSize = (
 ) => {
 	if (value === null || value === '') return fallback;
 	const parsed = Number(value);
+
 	if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > max) {
 		throw new InvalidRequest({
 			status: 400,
 			message: `Page size must be between 1 and ${max}`
 		});
 	}
+
 	return parsed;
 };

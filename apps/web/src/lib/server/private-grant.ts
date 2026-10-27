@@ -45,7 +45,9 @@ const grantPayload = ({
 		String(version),
 		String(expiresAtSeconds)
 	];
+
 	if (purpose) payload.push(purpose);
+
 	return payload.join('\n');
 };
 
@@ -61,7 +63,9 @@ const importSigningKey = (signingKey: string) =>
 const base64Url = (value: ArrayBuffer) => {
 	const bytes = new Uint8Array(value);
 	let binary = '';
+
 	for (const byte of bytes) binary += String.fromCharCode(byte);
+
 	return btoa(binary)
 		.replaceAll('+', '-')
 		.replaceAll('/', '_')
@@ -72,9 +76,11 @@ const decodeBase64Url = (value: string) => {
 	if (!SIGNATURE_PATTERN.test(value)) return;
 	const binary = atob(value.replaceAll('-', '+').replaceAll('_', '/') + '=');
 	const bytes = new Uint8Array(binary.length);
+
 	for (let index = 0; index < binary.length; index += 1) {
 		bytes[index] = binary.charCodeAt(index);
 	}
+
 	return bytes;
 };
 
@@ -95,8 +101,10 @@ export const mintPrivateGrant = async ({
 }: MintPrivateGrantOptions) => {
 	const expiresAtSeconds =
 		Math.floor(now.getTime() / 1_000) + PRIVATE_GRANT_TTL_SECONDS;
+
 	const scope = { contentOrigin, fileId, version, expiresAtSeconds, purpose };
 	const key = await importSigningKey(signingKey);
+
 	const signature = base64Url(
 		await crypto.subtle.sign(
 			'HMAC',
@@ -104,6 +112,7 @@ export const mintPrivateGrant = async ({
 			textEncoder.encode(grantPayload(scope))
 		)
 	);
+
 	return { expiresAtSeconds, signature };
 };
 
@@ -123,9 +132,12 @@ export const verifyPrivateGrant = async ({
 	) {
 		return false;
 	}
+
 	const decoded = decodeBase64Url(signature);
+
 	if (!decoded) return false;
 	const key = await importSigningKey(signingKey);
+
 	return crypto.subtle.verify(
 		'HMAC',
 		key,

@@ -6,32 +6,8 @@ const routeSource = readFileSync(
 	new URL('../../routes/s/[id]/[...path]/+server.ts', import.meta.url),
 	'utf8'
 );
-const kitUrlModule: unknown = await import(
-	new URL(
-		'../../../node_modules/@sveltejs/kit/src/utils/url.js',
-		import.meta.url
-	).href
-);
 
-const normalizePath = (path: string, trailingSlash: string) => {
-	if (
-		typeof kitUrlModule !== 'object' ||
-		kitUrlModule === null ||
-		!('normalize_path' in kitUrlModule) ||
-		typeof kitUrlModule.normalize_path !== 'function'
-	) {
-		throw new Error('Installed SvelteKit normalize_path is unavailable');
-	}
-	const result: unknown = Reflect.apply(
-		kitUrlModule.normalize_path,
-		undefined,
-		[path, trailingSlash]
-	);
-	if (typeof result !== 'string') {
-		throw new Error('Installed SvelteKit normalize_path returned a non-string');
-	}
-	return result;
-};
+import { normalize_path as normalizePath } from '../../../node_modules/@sveltejs/kit/src/utils/url.js';
 
 describe('static site route canonicalization', () => {
 	it('configures the endpoint to preserve both slash forms without redirects', () => {

@@ -11,17 +11,19 @@ import {
 	type ListCursor
 } from '../../list-cursor';
 import type { FileInternals } from './internals';
-import type { FilesShape } from './types';
+import type { FilesService } from './types';
 import { decodeContentRows, decodeVersionRows, toVersion } from './types';
 
 export const queryOps = (
 	internals: FileInternals
-): Pick<FilesShape, 'list' | 'detail' | 'findContent'> => {
+): Pick<FilesService, 'list' | 'detail' | 'findContent'> => {
 	const { sql, findDashboardFile } = internals;
+
 	return {
 		list: Effect.fn('Files.list')(function* (trashed, page) {
 			const now = new Date().toISOString();
 			const limit = page?.limit ?? 200;
+
 			const cursor = yield* Effect.try({
 				try: () => decodeListCursor(page?.cursor ?? null),
 				catch: (cause) =>
@@ -29,7 +31,9 @@ export const queryOps = (
 						? cause
 						: new InvalidRequest({ status: 400, message: 'Cursor is invalid' })
 			});
+
 			const sortColumn = trashed ? 'f.deleted_at' : 'f.updated_at';
+
 			// Keyset pagination over (sort column, id); one extra row tells us
 			// whether another page exists without a second query.
 			const rows = yield* sql
@@ -54,10 +58,12 @@ export const queryOps = (
 							})
 					)
 				);
+
 			const decoded = decodeDashboardRows(rows);
 			const pageRows = decoded.slice(0, limit);
 			const files = pageRows.map(toDashboardFile);
 			const last = pageRows[pageRows.length - 1];
+
 			const nextCursor =
 				decoded.length > limit && last
 					? encodeListCursor({
@@ -65,11 +71,13 @@ export const queryOps = (
 							id: last.id
 						} satisfies ListCursor)
 					: null;
+
 			return { files, nextCursor };
 		}),
 		detail: Effect.fn('Files.detail')(function* (id, versionPage) {
 			const file = yield* findDashboardFile(id);
 			const limit = versionPage?.limit ?? 50;
+
 			const cursor = yield* Effect.try({
 				try: () => decodeListCursor(versionPage?.cursor ?? null),
 				catch: (cause) =>
@@ -77,13 +85,16 @@ export const queryOps = (
 						? cause
 						: new InvalidRequest({ status: 400, message: 'Cursor is invalid' })
 			});
+
 			const beforeVersion = cursor ? Number(cursor.k) : null;
+
 			if (beforeVersion !== null && !Number.isSafeInteger(beforeVersion)) {
 				return yield* new InvalidRequest({
 					status: 400,
 					message: 'Cursor is invalid'
 				});
 			}
+
 			const rows = yield* sql
 				.unsafe(
 					`SELECT version, size_bytes, content_type, created_at
@@ -101,9 +112,11 @@ export const queryOps = (
 							new StorageError({ operation: 'list file versions', cause })
 					)
 				);
+
 			const decoded = decodeVersionRows(rows);
 			const pageRows = decoded.slice(0, limit);
 			const lastVersion = pageRows[pageRows.length - 1];
+
 			return {
 				file,
 				versions: pageRows.map(toVersion),
@@ -131,6 +144,7 @@ export const queryOps = (
 					message: 'Version is invalid'
 				});
 			}
+
 			const rows =
 				version === undefined
 					? yield* sql`
@@ -184,8 +198,11 @@ export const queryOps = (
 									new StorageError({ operation: 'find file version', cause })
 							)
 						);
+
 			const row = decodeContentRows(rows)[0];
+
 			if (!row) return yield* new NotFound({ id });
+
 			return {
 				file: {
 					id: row.id,
@@ -208,5 +225,5 @@ export const queryOps = (
 				thumbnailR2Key: row.thumbnail_r2_key
 			};
 		})
-	} satisfies Pick<FilesShape, 'list' | 'detail' | 'findContent'>;
+	} satisfies Pick<FilesService, 'list' | 'detail' | 'findContent'>;
 };

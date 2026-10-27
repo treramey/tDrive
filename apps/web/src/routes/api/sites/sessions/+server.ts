@@ -19,6 +19,7 @@ const readManifest = (request: Request) =>
 			invalidLengthMessage: 'Site manifest length is invalid',
 			invalidJsonMessage: 'A JSON site manifest is required'
 		});
+
 		return yield* Schema.decodeUnknownEffect(SiteSessionCreateSchema)(
 			value
 		).pipe(
@@ -39,6 +40,7 @@ export const POST: RequestHandler = ({ cookies, request, url }) =>
 			const sites = yield* Sites;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			const input: SiteSessionCreate = yield* readManifest(request);
+
 			return Response.json(yield* sites.createSession(input), { status: 201 });
 		})
 	);

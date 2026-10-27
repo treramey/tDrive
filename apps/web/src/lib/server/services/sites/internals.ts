@@ -26,12 +26,15 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 		const rows = yield* Effect.tryPromise({
 			try: async () => {
 				const result = await statement.all();
+
 				if (!result.success) throw new Error(result.error ?? operation);
+
 				return result.results;
 			},
 			catch: (cause) => new StorageError({ operation, cause })
 		});
-		return decodeRows(schema, rows);
+
+		return decodeRows(schema)(rows);
 	});
 
 	const findSession = Effect.fn('Sites.findSession')(function* (
@@ -49,8 +52,11 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 			SiteSessionRow,
 			'find site upload session'
 		);
+
 		const row = rows[0];
+
 		if (!row) return yield* new NotFound({ id: sessionId });
+
 		return {
 			id: row.id,
 			fileId: row.file_id,
@@ -78,6 +84,7 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 			StagedAssetRow,
 			'list staged site assets'
 		);
+
 		return rows.map((row) => ({
 			path: row.path,
 			expectedSizeBytes: row.expected_size_bytes,
@@ -101,6 +108,7 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 			catch: (cause) =>
 				new StorageError({ operation: 'count pending site cleanup', cause })
 		});
+
 		return (result?.count ?? 0) > 0;
 	});
 
@@ -172,7 +180,9 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 			PendingDeleteRow,
 			'list pending site cleanup'
 		);
+
 		const keys = rows.map((row) => row.r2_key);
+
 		if (keys.length === 0) return false;
 
 		const deleted = yield* blobs.deleteMany(keys).pipe(
@@ -196,7 +206,9 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 				}).pipe(Effect.as(false))
 			)
 		);
+
 		const disposition = siteCleanupDisposition(keys, deleted);
+
 		if (disposition.remainsPending) return true;
 
 		const statements = Array.from(
@@ -206,6 +218,7 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 					index * 80,
 					index * 80 + 80
 				);
+
 				return db
 					.prepare(
 						`DELETE FROM pending_site_asset_deletes
@@ -214,11 +227,13 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 					.bind(...chunk);
 			}
 		);
+
 		yield* Effect.tryPromise({
 			try: () => db.batch(statements),
 			catch: (cause) =>
 				new StorageError({ operation: 'finish site asset cleanup', cause })
 		});
+
 		return yield* pendingDeleteCount(fileId);
 	});
 
@@ -265,6 +280,7 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 		function* (limit = 10) {
 			const now = new Date().toISOString();
 			const bounded = Math.max(1, Math.min(limit, 25));
+
 			const rows = yield* all(
 				db
 					.prepare(
@@ -279,6 +295,7 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 				SiteSessionRow,
 				'list expired site upload sessions'
 			);
+
 			for (const row of rows) {
 				yield* cleanupStaged(
 					{
@@ -289,6 +306,7 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 					'aborted'
 				);
 			}
+
 			return rows.length;
 		}
 	);
@@ -297,6 +315,7 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 		limit: number
 	) {
 		const bounded = Math.max(1, Math.min(limit, 25));
+
 		const rows = yield* Effect.tryPromise({
 			try: async () => {
 				const result = await db
@@ -308,15 +327,19 @@ export const createInternals = ({ db, blobs, config }: CoreDeps) => {
 					)
 					.bind(bounded)
 					.all<{ file_id: string }>();
+
 				if (!result.success) {
 					throw new Error(result.error ?? 'Site cleanup listing failed');
 				}
+
 				return result.results;
 			},
 			catch: (cause) =>
 				new StorageError({ operation: 'list pending site cleanup', cause })
 		});
+
 		for (const row of rows) yield* drainDeletes(row.file_id);
+
 		return rows.length;
 	});
 

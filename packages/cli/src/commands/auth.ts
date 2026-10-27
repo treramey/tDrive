@@ -4,7 +4,7 @@ import {
 	DeviceTokenResponseSchema
 } from '@tdrive/shared';
 import { spawn } from 'node:child_process';
-import { Console, Effect, Schema } from 'effect';
+import { Console, Effect, Schema, Match } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { HttpClient } from 'effect/unstable/http';
 import {
@@ -22,18 +22,20 @@ const openBrowser = (url: string) =>
 	Effect.tryPromise({
 		try: () =>
 			new Promise<void>((resolve, reject) => {
-				const command =
-					process.platform === 'darwin'
-						? 'open'
-						: process.platform === 'win32'
-							? 'cmd'
-							: 'xdg-open';
+				const command = Match.value(process.platform).pipe(
+					Match.when('darwin', () => 'open'),
+					Match.when('win32', () => 'cmd'),
+					Match.orElse(() => 'xdg-open')
+				);
+
 				const args =
 					process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+
 				const child = spawn(command, args, {
 					detached: true,
 					stdio: 'ignore'
 				});
+
 				child.once('error', reject);
 				child.once('spawn', () => {
 					child.unref();
@@ -74,6 +76,7 @@ export const login = Command.make(
 						cause
 					})
 			});
+
 			const authorizationBody = yield* Effect.tryPromise({
 				try: async () => {
 					const response = await fetch(`${endpoint}/api/auth/device`, {
@@ -81,7 +84,9 @@ export const login = Command.make(
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ name })
 					});
+
 					if (!response.ok) throw new Error(await responseError(response));
+
 					return response.json();
 				},
 				catch: (cause) =>
@@ -93,6 +98,7 @@ export const login = Command.make(
 						cause
 					})
 			});
+
 			const authorization = yield* Schema.decodeUnknownEffect(
 				DeviceAuthorizationResponseSchema
 			)(authorizationBody).pipe(
@@ -104,6 +110,7 @@ export const login = Command.make(
 						})
 				)
 			);
+
 			// The approval URL is opened in a browser where the dashboard
 			// session lives; never follow it to an origin we didn't dial.
 			yield* trustedServerUrl(
@@ -111,6 +118,7 @@ export const login = Command.make(
 				{ endpoint, apiKey: '', allowHttp },
 				'The verification URL returned by the server'
 			);
+
 			if (wantsJson()) {
 				yield* emit({
 					status: 'authorization_required',
@@ -123,6 +131,7 @@ export const login = Command.make(
 					`Approve this device with code ${authorization.userCode}`
 				);
 				yield* Console.log(authorization.verificationUriComplete);
+
 				if (!headless) {
 					yield* openBrowser(authorization.verificationUriComplete).pipe(
 						Effect.catch(() =>
@@ -135,8 +144,10 @@ export const login = Command.make(
 			}
 
 			let apiKey = '';
+
 			while (!apiKey) {
 				yield* Effect.sleep(`${authorization.interval} seconds`);
+
 				const pollResponse = yield* Effect.tryPromise({
 					try: async () => {
 						const response = await fetch(`${endpoint}/api/auth/device/token`, {
@@ -146,10 +157,13 @@ export const login = Command.make(
 								deviceCode: authorization.deviceCode
 							})
 						});
+
 						const body: unknown = await response.json();
+
 						if (response.status === 202 || response.status === 429) {
 							return { kind: 'pending' as const, body };
 						}
+
 						if (response.ok) return { kind: 'complete' as const, body };
 						throw new Error(`Device authorization failed (${response.status})`);
 					},
@@ -162,6 +176,7 @@ export const login = Command.make(
 							cause
 						})
 				});
+
 				const poll =
 					pollResponse.kind === 'complete'
 						? yield* Schema.decodeUnknownEffect(DeviceTokenResponseSchema)(
@@ -187,23 +202,26 @@ export const login = Command.make(
 										})
 								)
 							);
+
 				if ('apiKey' in poll) {
 					apiKey = poll.apiKey;
 				} else if (poll.status === 'slow_down') {
 					yield* Effect.sleep(`${authorization.interval} seconds`);
 				}
 			}
+
 			// Record the deployment's content origin so later commands can
 			// verify that server-returned download URLs stay on known ground.
 			const contentOrigin = yield* Effect.tryPromise({
 				try: () => discoverContentOrigin(endpoint, apiKey, allowHttp),
 				catch: () => new CliFailure({ message: 'unreachable' })
 			}).pipe(Effect.orElseSucceed(() => undefined));
+
 			yield* saveConfig({
 				endpoint,
 				apiKey,
-				...(contentOrigin ? { contentOrigin } : {}),
-				...(allowHttp ? { allowHttp } : {})
+				contentOrigin,
+				allowHttp: allowHttp || undefined
 			});
 			yield* emit(
 				wantsJson()
@@ -222,12 +240,11 @@ export const whoami = Command.make('whoami', {}, () =>
 				apiRequest('GET', `${config.endpoint}/api/auth/check`, config.apiKey)
 			)
 			.pipe(Effect.flatMap(ensureOk));
+
 		if (wantsJson()) {
 			yield* emit({
 				endpoint: config.endpoint,
-				...(config.contentOrigin !== undefined
-					? { contentOrigin: config.contentOrigin }
-					: {}),
+				contentOrigin: config.contentOrigin,
 				authenticated: true,
 				config: configPath()
 			});

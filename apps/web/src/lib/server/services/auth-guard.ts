@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from 'effect';
+import { Context, Effect, Layer, Schema, Option } from 'effect';
 import { StorageError } from '../errors';
 import { AuthGuardStore } from './bindings';
 
@@ -62,7 +62,7 @@ export interface BlockedAuthAttempt {
 
 export type AuthAttemptDecision = AllowedAuthAttempt | BlockedAuthAttempt;
 
-export interface AuthGuardShape {
+export interface AuthGuardService {
 	readonly consume: (
 		policy: AuthRatePolicy,
 		clientId: string
@@ -78,7 +78,7 @@ export interface AuthGuardShape {
 	) => Effect.Effect<void, StorageError>;
 }
 
-export class AuthGuard extends Context.Service<AuthGuard, AuthGuardShape>()(
+export class AuthGuard extends Context.Service<AuthGuard, AuthGuardService>()(
 	'app/AuthGuard'
 ) {}
 
@@ -132,8 +132,10 @@ const decodeStored = <A, I>(
 	if (value === null) return null;
 	const parsed: unknown = JSON.parse(value);
 	const decoded = Schema.decodeUnknownOption(schema)(parsed);
-	if (decoded._tag === 'None')
+
+	if (Option.isNone(decoded))
 		throw new Error('Stored auth guard state is invalid');
+
 	return decoded.value;
 };
 
@@ -153,7 +155,7 @@ const makeAuthGuard = (now: () => Date) =>
 
 		const write = (
 			key: string,
-			value: unknown,
+			value: typeof CounterState.Type | typeof FailureState.Type,
 			expirationTtl: number,
 			operation: string
 		) =>
@@ -170,7 +172,7 @@ const makeAuthGuard = (now: () => Date) =>
 
 		const writeOrBlock = (
 			key: string,
-			value: unknown,
+			value: typeof CounterState.Type | typeof FailureState.Type,
 			expirationTtl: number,
 			operation: string,
 			currentTime: number
@@ -198,6 +200,7 @@ const makeAuthGuard = (now: () => Date) =>
 			clientId: string
 		) {
 			const clientHash = yield* hashClientId(clientId);
+
 			return `v1:${prefix}:${clientHash}`;
 		});
 
@@ -206,15 +209,18 @@ const makeAuthGuard = (now: () => Date) =>
 				const policy = ratePolicies[policyName];
 				const key = yield* clientKey(policy.key, clientId);
 				const currentTime = now().getTime();
+
 				const current = yield* read(
 					key,
 					CounterState,
 					`read ${policy.key} rate limit`
 				);
+
 				const resetAtMs =
 					current === null || current.resetAtMs <= currentTime
 						? currentTime + policy.windowSeconds * 1_000
 						: current.resetAtMs;
+
 				const count =
 					current === null || current.resetAtMs <= currentTime
 						? 0
@@ -225,6 +231,7 @@ const makeAuthGuard = (now: () => Date) =>
 				}
 
 				const nextCount = count + 1;
+
 				// High-frequency policies (uploads) hit KV's ~1 write/sec/key
 				// ceiling under normal concurrent use; failing the counter
 				// write must not fail the legitimate request there. Abuse
@@ -236,8 +243,10 @@ const makeAuthGuard = (now: () => Date) =>
 						retryAfter(resetAtMs, currentTime) + MINIMUM_KV_TTL_SECONDS,
 						`update ${policy.key} rate limit`
 					).pipe(Effect.ignore);
+
 					return allowed(policy.limit - nextCount, resetAtMs);
 				}
+
 				const writeFailure = yield* writeOrBlock(
 					key,
 					{ count: nextCount, resetAtMs },
@@ -245,7 +254,9 @@ const makeAuthGuard = (now: () => Date) =>
 					`update ${policy.key} rate limit`,
 					currentTime
 				);
+
 				if (writeFailure) return writeFailure;
+
 				return allowed(policy.limit - nextCount, resetAtMs);
 			}),
 			checkPasscodeLock: Effect.fn('AuthGuard.checkPasscodeLock')(
@@ -253,9 +264,11 @@ const makeAuthGuard = (now: () => Date) =>
 					const key = yield* clientKey('passcode-failures', clientId);
 					const currentTime = now().getTime();
 					const state = yield* read(key, FailureState, 'read passcode lockout');
+
 					if (state?.lockedUntilMs && state.lockedUntilMs > currentTime) {
 						return blocked('lockout', state.lockedUntilMs, currentTime);
 					}
+
 					return allowed(PASSCODE_FAILURE_LIMIT, currentTime);
 				}
 			),
@@ -263,11 +276,13 @@ const makeAuthGuard = (now: () => Date) =>
 				function* (clientId) {
 					const key = yield* clientKey('passcode-failures', clientId);
 					const currentTime = now().getTime();
+
 					const current = yield* read(
 						key,
 						FailureState,
 						'read passcode failures'
 					);
+
 					if (current?.lockedUntilMs && current.lockedUntilMs > currentTime) {
 						return blocked('lockout', current.lockedUntilMs, currentTime);
 					}
@@ -276,15 +291,20 @@ const makeAuthGuard = (now: () => Date) =>
 						current !== null &&
 						currentTime - current.windowStartedAtMs <
 							PASSCODE_FAILURE_WINDOW_SECONDS * 1_000;
+
 					const failures = inWindow ? current.failures + 1 : 1;
+
 					const windowStartedAtMs = inWindow
 						? current.windowStartedAtMs
 						: currentTime;
+
 					const lockedUntilMs =
 						failures >= PASSCODE_FAILURE_LIMIT
 							? currentTime + PASSCODE_LOCKOUT_SECONDS * 1_000
 							: null;
+
 					const state = { failures, windowStartedAtMs, lockedUntilMs };
+
 					const expiresAtMs =
 						lockedUntilMs ??
 						windowStartedAtMs + PASSCODE_FAILURE_WINDOW_SECONDS * 1_000;
@@ -296,6 +316,7 @@ const makeAuthGuard = (now: () => Date) =>
 						'update passcode failures',
 						currentTime
 					);
+
 					if (writeFailure) return writeFailure;
 
 					return lockedUntilMs === null

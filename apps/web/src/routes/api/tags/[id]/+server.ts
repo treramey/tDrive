@@ -15,9 +15,11 @@ export const PATCH: RequestHandler = ({ cookies, params, request, url }) =>
 			const auth = yield* Auth;
 			const tags = yield* Tags;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
+
 			const tag = yield* readUpdate(request).pipe(
 				Effect.flatMap((input) => tags.update(params.id, input))
 			);
+
 			return Response.json({ tag });
 		})
 	);
@@ -29,6 +31,7 @@ export const DELETE: RequestHandler = ({ cookies, params, request, url }) =>
 			const tags = yield* Tags;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			yield* tags.remove(params.id);
+
 			return new Response(null, { status: 204 });
 		})
 	);

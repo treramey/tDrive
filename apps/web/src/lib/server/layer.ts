@@ -23,6 +23,7 @@ export const requestLayer = (env: Env) => {
 		Layer.succeed(AuthGuardStore, env.AUTH_GUARD),
 		ConfigLive(env)
 	);
+
 	const sql = SqlLive.pipe(Layer.provide(bindings));
 	const blobs = BlobsLive.pipe(Layer.provide(bindings));
 	const infrastructure = Layer.mergeAll(bindings, sql, blobs);
@@ -31,16 +32,21 @@ export const requestLayer = (env: Env) => {
 	const authGuard = AuthGuardLive().pipe(Layer.provide(bindings));
 	const grantSecrets = GrantSecretsLive.pipe(Layer.provide(infrastructure));
 	const tags = TagsLive.pipe(Layer.provide(infrastructure));
+
 	const search = SearchLive.pipe(
 		Layer.provide(Layer.merge(infrastructure, semantic))
 	);
+
 	const sites = SitesLive.pipe(Layer.provide(infrastructure));
+
 	const files = FilesLive.pipe(
 		Layer.provide(Layer.mergeAll(infrastructure, tags))
 	);
+
 	const indexing = IndexingLive.pipe(
 		Layer.provide(Layer.mergeAll(infrastructure, semantic))
 	);
+
 	const lifecycle = LifecycleLive.pipe(
 		Layer.provide(Layer.mergeAll(infrastructure, auth, sites, files, indexing))
 	);

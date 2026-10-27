@@ -17,11 +17,13 @@ export const GET: RequestHandler = ({ cookies, request, url }) =>
 			const config = yield* AppConfig;
 			yield* authorizeRequest(auth, request, url, cookies);
 			const omitMeta = url.searchParams.get('omitMeta') === '1';
+
 			const searchInput = {
 				query: url.searchParams.get('q') ?? '',
 				tagIds: url.searchParams.getAll('tag').slice(0, 20),
 				cursor: url.searchParams.get('cursor')
 			};
+
 			// Load-more sends omitMeta=1; skip tags and indexing on extra pages.
 			const [page, tagList, semantic] = omitMeta
 				? [yield* search.files(searchInput), null, null]
@@ -29,6 +31,7 @@ export const GET: RequestHandler = ({ cookies, request, url }) =>
 						[search.files(searchInput), tags.list, indexing.status],
 						{ concurrency: 'unbounded' }
 					);
+
 			return Response.json({
 				files: page.files,
 				nextCursor: page.nextCursor,

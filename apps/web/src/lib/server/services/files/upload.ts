@@ -9,19 +9,21 @@ import { validateUploadLength } from '../../upload-stream';
 import { forgetTagListCache } from '../tags';
 import { Effect } from 'effect';
 import type { FileInternals } from './internals';
-import type { FilesShape } from './types';
+import type { FilesService } from './types';
 import { decodeContentRows } from './types';
 
 export const uploadOps = (
 	internals: FileInternals
-): Pick<FilesShape, 'upload' | 'uploadVersion' | 'restoreVersion'> => {
+): Pick<FilesService, 'upload' | 'uploadVersion' | 'restoreVersion'> => {
 	const { db, blobs, sql, config, tags } = internals;
+
 	const {
 		checkStorageQuota,
 		compensateStoredBlob,
 		commitStoredVersion,
 		findDashboardFile
 	} = internals;
+
 	return {
 		upload: Effect.fn('Files.upload')(function* (input) {
 			const size = yield* Effect.try({
@@ -35,6 +37,7 @@ export const uploadOps = (
 								message: 'Upload length is invalid'
 							})
 			});
+
 			const displayName = yield* Effect.try({
 				try: () => cleanFileName(input.displayName),
 				catch: (cause) =>
@@ -45,18 +48,22 @@ export const uploadOps = (
 								message: 'File name is invalid'
 							})
 			});
+
 			yield* checkStorageQuota(size);
 			const contentType = contentTypeForUpload(displayName, input.contentType);
+
 			const visibility = visibilityForFile(
 				displayName,
 				contentType,
 				input.public
 			);
+
 			const id = crypto.randomUUID();
 			const resolvedTags = yield* tags.resolveNames(input.tags);
 			const r2Key = `v/${id}/${crypto.randomUUID()}`;
 			const createdAt = new Date().toISOString();
 			const stored = yield* blobs.put(r2Key, input.body, size, contentType);
+
 			const statements = [
 				db
 					.prepare(
@@ -96,6 +103,7 @@ export const uploadOps = (
 				catch: (cause) =>
 					new StorageError({ operation: 'commit file metadata', cause })
 			});
+
 			yield* commit.pipe(
 				Effect.catch((failure) =>
 					compensateStoredBlob(failure, id, 1, r2Key, 'upload')
@@ -126,14 +134,17 @@ export const uploadOps = (
 		}),
 		uploadVersion: Effect.fn('Files.uploadVersion')(function* (input) {
 			const current = yield* findDashboardFile(input.id);
+
 			if (current.deletedAt !== null)
 				return yield* new NotFound({ id: input.id });
+
 			if (current.kind === 'site') {
 				return yield* new InvalidRequest({
 					status: 400,
 					message: 'Republish sites with `tdrive site put`'
 				});
 			}
+
 			const size = yield* Effect.try({
 				try: () =>
 					validateUploadLength(input.contentLength, config.maxUploadBytes),
@@ -145,19 +156,24 @@ export const uploadOps = (
 								message: 'Upload length is invalid'
 							})
 			});
+
 			yield* checkStorageQuota(size);
+
 			const contentType = contentTypeForUpload(
 				current.displayName,
 				input.contentType
 			);
+
 			const r2Key = `v/${current.id}/${crypto.randomUUID()}`;
 			const stored = yield* blobs.put(r2Key, input.body, size, contentType);
+
 			const commit = commitStoredVersion(
 				current,
 				r2Key,
 				stored.size,
 				contentType
 			);
+
 			return yield* commit.pipe(
 				Effect.catch((failure) =>
 					compensateStoredBlob(
@@ -177,20 +193,25 @@ export const uploadOps = (
 					message: 'Version is invalid'
 				});
 			}
+
 			const current = yield* findDashboardFile(id);
+
 			if (current.deletedAt !== null) return yield* new NotFound({ id });
+
 			if (current.kind === 'site') {
 				return yield* new InvalidRequest({
 					status: 400,
 					message: 'Republish sites with `tdrive site put`'
 				});
 			}
+
 			if (current.version === version) {
 				return yield* new InvalidRequest({
 					status: 409,
 					message: 'That version is already current'
 				});
 			}
+
 			const rows = yield* sql`
 				SELECT
 					f.id, f.display_name, v.content_type, v.version, v.size_bytes,
@@ -206,17 +227,21 @@ export const uploadOps = (
 						new StorageError({ operation: 'find version to restore', cause })
 				)
 			);
+
 			const source = decodeContentRows(rows)[0];
+
 			if (!source) return yield* new NotFound({ id });
 			yield* checkStorageQuota(source.size_bytes);
 			const sourceObject = yield* blobs.get(source.r2_key);
 			const r2Key = `v/${current.id}/${crypto.randomUUID()}`;
+
 			const stored = yield* blobs.put(
 				r2Key,
 				sourceObject.body,
 				source.size_bytes,
 				source.content_type
 			);
+
 			return yield* commitStoredVersion(
 				current,
 				r2Key,
@@ -234,5 +259,5 @@ export const uploadOps = (
 				)
 			);
 		})
-	} satisfies Pick<FilesShape, 'upload' | 'uploadVersion' | 'restoreVersion'>;
+	} satisfies Pick<FilesService, 'upload' | 'uploadVersion' | 'restoreVersion'>;
 };

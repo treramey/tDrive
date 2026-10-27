@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import { Effect, Layer } from 'effect';
-import { describe, expect, it } from 'vitest';
+import { getPlatformProxy } from 'wrangler';
+import { Effect, Layer, Schema } from 'effect';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { verifyPrivateGrant } from '../private-grant';
 import { Db } from './bindings';
 import { GrantSecrets, GrantSecretsLive } from './grant-secrets';
@@ -11,34 +11,24 @@ const migration = readFileSync(
 	'utf8'
 );
 
-const d1FromSqlite = (database: DatabaseSync) =>
-	({
-		prepare: (query: string) => {
-			const makeStatement = (
-				boundValues: ReadonlyArray<SQLInputValue> = []
-			) => ({
-				bind: (...values: ReadonlyArray<SQLInputValue>) =>
-					makeStatement(values),
-				run: async () => {
-					await Promise.resolve();
-					const result = database.prepare(query).run(...boundValues);
-					return {
-						success: true,
-						results: [],
-						meta: { changes: Number(result.changes) }
-					};
-				},
-				first: async <T>() => {
-					await Promise.resolve();
-					return (
-						(database.prepare(query).get(...boundValues) as T | undefined) ??
-						null
-					);
-				}
-			});
-			return makeStatement();
-		}
-	}) as unknown as D1Database;
+const createDatabase = async (): Promise<D1Database> => {
+	const proxy = await getPlatformProxy<{ DB: D1Database }>({
+		configPath: 'wrangler.jsonc',
+		persist: false
+	});
+
+	onTestFinished(() => proxy.dispose());
+	const db = proxy.env.DB;
+	await db.prepare(migration).run();
+
+	return {
+		prepare: db.prepare.bind(db),
+		batch: db.batch.bind(db),
+		exec: db.exec.bind(db),
+		withSession: db.withSession.bind(db),
+		dump: db.dump.bind(db)
+	};
+};
 
 const requestLayer = (db: D1Database) =>
 	GrantSecretsLive.pipe(Layer.provide(Layer.succeed(Db, db)));
@@ -50,6 +40,7 @@ const mintFromRequest = (
 	Effect.runPromise(
 		Effect.gen(function* () {
 			const secrets = yield* GrantSecrets;
+
 			return yield* secrets.mint({
 				contentOrigin: 'https://content.example.test',
 				fileId: 'file-1',
@@ -66,6 +57,7 @@ const verifyFromRequest = (
 	Effect.runPromise(
 		Effect.gen(function* () {
 			const secrets = yield* GrantSecrets;
+
 			return yield* secrets.verify({
 				contentOrigin: 'https://content.example.test',
 				requestOrigin: 'https://content.example.test',
@@ -79,44 +71,38 @@ const verifyFromRequest = (
 	);
 
 describe('persisted content grant secrets', () => {
-	it('converges concurrent lazy initialization on one SQLite row', async () => {
-		const database = new DatabaseSync(':memory:');
-		database.exec(migration);
-		const db = d1FromSqlite(database);
+	it('converges concurrent lazy initialization on one D1 row', async () => {
+		const db = await createDatabase();
 
 		const [left, right] = await Promise.all([
 			mintFromRequest(db),
 			mintFromRequest(db)
 		]);
-		const row = database
-			.prepare('SELECT count(*) AS count FROM instance_secrets')
-			.get() as { count: number };
+
+		const row = Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int }))(
+			await db.prepare('SELECT count(*) AS count FROM instance_secrets').first()
+		);
 
 		expect(row.count).toBe(1);
 		await expect(verifyFromRequest(db, left)).resolves.toBe(true);
 		await expect(verifyFromRequest(db, right)).resolves.toBe(true);
-		database.close();
 	});
 
 	it('validates a link across separate request-scoped services', async () => {
-		const database = new DatabaseSync(':memory:');
-		database.exec(migration);
-		const db = d1FromSqlite(database);
+		const db = await createDatabase();
 
 		const grant = await mintFromRequest(db);
 		await expect(verifyFromRequest(db, grant)).resolves.toBe(true);
 		await expect(verifyFromRequest(db, grant)).resolves.toBe(true);
-		database.close();
 	});
 
 	it('caches the signing key per isolate within the TTL', async () => {
-		const database = new DatabaseSync(':memory:');
-		database.exec(migration);
-		const db = d1FromSqlite(database);
+		const db = await createDatabase();
 		const prepared = db.prepare.bind(db);
 		let secretReads = 0;
 		db.prepare = (query: string) => {
 			if (/FROM instance_secrets/.test(query)) secretReads += 1;
+
 			return prepared(query);
 		};
 
@@ -128,13 +114,10 @@ describe('persisted content grant secrets', () => {
 		// isolate cache instead of querying D1 again.
 		expect(readsAfterFirst).toBeGreaterThan(0);
 		expect(secretReads).toBe(readsAfterFirst);
-		database.close();
 	});
 
 	it('does not let a raw PASSCODE guess validate a persisted-key grant', async () => {
-		const database = new DatabaseSync(':memory:');
-		database.exec(migration);
-		const db = d1FromSqlite(database);
+		const db = await createDatabase();
 		const grant = await mintFromRequest(db);
 
 		await expect(
@@ -149,6 +132,5 @@ describe('persisted content grant secrets', () => {
 				now: new Date('2026-07-27T12:00:00.000Z')
 			})
 		).resolves.toBe(false);
-		database.close();
 	});
 });

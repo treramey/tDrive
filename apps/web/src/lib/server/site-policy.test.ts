@@ -48,6 +48,7 @@ describe('site upload policy', () => {
 			sizeBytes: 20,
 			contentType: 'text/html'
 		};
+
 		expect(() =>
 			prepareSiteManifest({ displayName: 'dist', assets: [asset, asset] }, 100)
 		).toThrow('duplicate');

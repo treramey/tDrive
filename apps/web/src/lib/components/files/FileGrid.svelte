@@ -47,6 +47,7 @@
 	const totalSize = $derived(
 		files.reduce((sum, file) => sum + file.sizeBytes, 0)
 	);
+
 	const initialLoading = $derived(loading && files.length === 0);
 </script>
 

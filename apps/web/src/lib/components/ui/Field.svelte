@@ -19,6 +19,7 @@
 
 	const descriptionId = $derived(description ? `${id}-description` : undefined);
 	const errorId = $derived(error ? `${id}-error` : undefined);
+
 	const describedBy = $derived(
 		[descriptionId, errorId].filter(Boolean).join(' ') || undefined
 	);

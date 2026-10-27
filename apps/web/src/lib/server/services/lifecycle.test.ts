@@ -5,11 +5,14 @@ import { runLifecycleTasks } from './lifecycle';
 describe('scheduled lifecycle orchestration', () => {
 	it('runs every bounded task and returns aggregate counts', async () => {
 		const calls: string[] = [];
+
 		const task = (name: string, count: number) =>
 			Effect.sync(() => {
 				calls.push(name);
+
 				return count;
 			});
+
 		const result = await Effect.runPromise(
 			runLifecycleTasks({
 				authentication: task('authentication', 1),
@@ -19,6 +22,7 @@ describe('scheduled lifecycle orchestration', () => {
 				vectors: task('vectors', 5)
 			})
 		);
+
 		expect(calls).toEqual([
 			'authentication',
 			'sites',
@@ -38,11 +42,13 @@ describe('scheduled lifecycle orchestration', () => {
 	it('isolates one failed task so later cleanup still runs', async () => {
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const calls: string[] = [];
+
 		const result = await Effect.runPromise(
 			runLifecycleTasks({
 				authentication: Effect.fail('database unavailable'),
 				sites: Effect.sync(() => {
 					calls.push('sites');
+
 					return 1;
 				}),
 				indexing: Effect.succeed(0),
@@ -50,6 +56,7 @@ describe('scheduled lifecycle orchestration', () => {
 				vectors: Effect.succeed(0)
 			})
 		);
+
 		expect(result.authentication).toBe(0);
 		expect(calls).toEqual(['sites']);
 		expect(error).toHaveBeenCalledOnce();

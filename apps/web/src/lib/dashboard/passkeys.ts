@@ -20,22 +20,26 @@ export const passkeyMessage = (cause: unknown) => {
 		) {
 			return 'No passkey was used. Try again or use the passcode.';
 		}
+
 		if (
 			'code' in cause &&
 			cause.code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED'
 		)
 			return 'This passkey is already saved on this drive.';
+
 		if (
 			'code' in cause &&
 			cause.code === 'ERROR_AUTHENTICATOR_MISSING_USER_VERIFICATION_SUPPORT'
 		)
 			return 'This device cannot confirm it is you. Use the passcode.';
+
 		if (cause instanceof ApiError) return cause.message;
 	}
+
 	return 'The passkey request failed. Try again or use the passcode.';
 };
 
-const post = (path: string, body: unknown, signal?: AbortSignal) =>
+const post = <A>(path: string, body: A, signal?: AbortSignal) =>
 	request(`/api/auth/passkeys/${path}`, BROWSER_SESSION, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -55,6 +59,7 @@ const ceremony = async <A>(
 	const abort = () => browser.WebAuthnAbortService.cancelCeremony();
 	signal?.throwIfAborted();
 	signal?.addEventListener('abort', abort, { once: true });
+
 	try {
 		return await run(browser);
 	} finally {
@@ -67,9 +72,11 @@ export const signInWithPasskey = (signal?: AbortSignal) =>
 		const prompt = parsePasskeyLoginOptions(
 			await (await post('login/options', {}, signal)).json()
 		);
+
 		const credential = await browser.startAuthentication({
 			optionsJSON: prompt.options
 		});
+
 		await post(
 			'login/verify',
 			{ ceremonyId: prompt.ceremonyId, credential },
@@ -85,9 +92,11 @@ export const enrollPasskey = (
 		const prompt = parsePasskeyEnrollOptions(
 			await (await post('enroll/options', input, signal)).json()
 		);
+
 		const credential = await browser.startRegistration({
 			optionsJSON: prompt.options
 		});
+
 		await post(
 			'enroll/verify',
 			{ ceremonyId: prompt.ceremonyId, credential },

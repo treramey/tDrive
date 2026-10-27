@@ -53,12 +53,14 @@ describe('file content links', () => {
 			version: 3,
 			now: new Date('2026-07-27T12:00:00.000Z')
 		});
+
 		const link = await buildFileContentLink(
 			config,
 			{ file: file(false) },
 			undefined,
 			grant
 		);
+
 		const url = new URL(link.url);
 
 		expect(url.origin).toBe(config.contentOrigin);
@@ -77,6 +79,7 @@ describe('file content links', () => {
 			version: 3,
 			now: new Date('2026-07-27T12:00:00.000Z')
 		});
+
 		const link = await buildFileContentLink(
 			config,
 			{ file: file(true) },
@@ -84,6 +87,7 @@ describe('file content links', () => {
 			grant,
 			true
 		);
+
 		const url = new URL(link.url);
 
 		expect(url.searchParams.get('v')).toBe('3');

@@ -4,13 +4,7 @@ import { partitionUploadFiles, UploadManager } from './uploads.svelte';
 
 type UploadFile = typeof import('./api').uploadFile;
 
-const { uploadFileMock } = vi.hoisted(() => ({
-	uploadFileMock: vi.fn<UploadFile>()
-}));
-
-vi.mock('./api', () => ({
-	uploadFile: uploadFileMock
-}));
+const uploadFileMock = vi.fn<UploadFile>();
 
 const uploadResponse = {
 	file: {
@@ -61,6 +55,7 @@ describe('upload file limits', () => {
 			{ name: 'large.txt', size: oversized.size }
 		]);
 		expect(rejection).toBeDefined();
+
 		if (!rejection) throw new Error('Expected an oversized file');
 		expect('file' in rejection).toBe(false);
 	});
@@ -70,7 +65,7 @@ describe('UploadManager', () => {
 	it('releases completed files while keeping display metadata', async () => {
 		const onComplete = vi.fn();
 		uploadFileMock.mockResolvedValue(uploadResponse);
-		const uploads = new UploadManager(onComplete);
+		const uploads = new UploadManager(onComplete, uploadFileMock);
 
 		uploads.enqueue([file()], defaults);
 
@@ -83,6 +78,7 @@ describe('UploadManager', () => {
 			uploaded: 6,
 			total: 6
 		});
+
 		if (!completed) throw new Error('Expected a completed upload');
 		expect('file' in completed).toBe(false);
 		expect(onComplete).toHaveBeenCalledOnce();
@@ -99,7 +95,7 @@ describe('UploadManager', () => {
 		uploadFileMock
 			.mockRejectedValueOnce(new Error('Connection lost'))
 			.mockResolvedValueOnce(uploadResponse);
-		const uploads = new UploadManager(vi.fn());
+		const uploads = new UploadManager(vi.fn(), uploadFileMock);
 
 		uploads.enqueue([file()], defaults);
 		await vi.waitFor(() => {
@@ -110,6 +106,7 @@ describe('UploadManager', () => {
 		});
 
 		const failed = uploads.items[0];
+
 		if (!failed) throw new Error('Expected a failed upload');
 		const id = failed.id;
 		uploads.retry(id);
@@ -124,6 +121,7 @@ describe('UploadManager', () => {
 			expect(uploads.items[1]?.status).toBe('error');
 		});
 		const secondFailure = uploads.items[1];
+
 		if (!secondFailure) throw new Error('Expected a second failed upload');
 		const failedId = secondFailure.id;
 		uploads.remove(failedId);
@@ -140,11 +138,13 @@ describe('UploadManager', () => {
 		uploadFileMock.mockImplementation(
 			(_token, _file, _isPublic, _tagNames, _expiresAt, options) => {
 				const signal = options?.signal;
+
 				if (signal) signals.push(signal);
+
 				return pending.promise;
 			}
 		);
-		const uploads = new UploadManager(vi.fn());
+		const uploads = new UploadManager(vi.fn(), uploadFileMock);
 
 		uploads.enqueue(
 			[file('one.txt'), file('two.txt'), file('three.txt'), file('four.txt')],
@@ -172,7 +172,7 @@ describe('UploadManager', () => {
 	it('disposes active work and rejects future enqueues', async () => {
 		const pending = Promise.withResolvers<UploadResponse>();
 		uploadFileMock.mockReturnValue(pending.promise);
-		const uploads = new UploadManager(vi.fn());
+		const uploads = new UploadManager(vi.fn(), uploadFileMock);
 
 		uploads.enqueue([file()], defaults);
 		await vi.waitFor(() => {

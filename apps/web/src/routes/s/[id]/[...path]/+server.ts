@@ -22,9 +22,11 @@ export const trailingSlash = 'ignore';
 const siteGrant = (path: string) => {
 	const [marker, versionValue, expiresValue, signature, ...assetPath] =
 		path.split('/');
+
 	if (marker !== '@grant') return null;
 	const version = Number(versionValue);
 	const expiresAtSeconds = Number(expiresValue);
+
 	if (
 		!Number.isSafeInteger(version) ||
 		version < 1 ||
@@ -34,6 +36,7 @@ const siteGrant = (path: string) => {
 	) {
 		return false;
 	}
+
 	return {
 		version,
 		expiresAtSeconds,
@@ -46,24 +49,30 @@ const serveSite: RequestHandler = ({ params, request, url }) =>
 	runEdge(
 		Effect.gen(function* () {
 			const grant = siteGrant(params.path ?? '');
+
 			if (grant === false) return yield* new NotFound({ id: params.id });
 			const hasGrant = grant !== null;
 			const thumbnailSource = url.searchParams.get('purpose') === 'thumbnail';
+
 			if (thumbnailSource && !hasGrant) {
 				return yield* new NotFound({ id: params.id });
 			}
+
 			if (
 				!hasGrant &&
 				!isSiteVersionRequestServable(url.searchParams.get('v'))
 			) {
 				return yield* new NotFound({ id: params.id });
 			}
+
 			const sites = yield* Sites;
 			const blobs = yield* Blobs;
 			const files = yield* Files;
 			const config = yield* AppConfig;
+
 			if (grant) {
 				const grantSecrets = yield* GrantSecrets;
+
 				const granted = yield* grantSecrets.verify({
 					contentOrigin: config.contentOrigin,
 					requestOrigin: url.origin,
@@ -72,7 +81,9 @@ const serveSite: RequestHandler = ({ params, request, url }) =>
 					expiresAtSeconds: grant.expiresAtSeconds,
 					signature: grant.signature
 				});
+
 				if (!granted) return yield* new NotFound({ id: params.id });
+
 				if (thumbnailSource) {
 					const thumbnailGranted = yield* grantSecrets.verify({
 						contentOrigin: config.contentOrigin,
@@ -83,9 +94,11 @@ const serveSite: RequestHandler = ({ params, request, url }) =>
 						signature: url.searchParams.get('g') ?? '',
 						purpose: 'thumbnail-source'
 					});
+
 					if (!thumbnailGranted) return yield* new NotFound({ id: params.id });
 				}
 			}
+
 			const asset = yield* sites.findAsset(
 				params.id,
 				grant ? grant.assetPath : (params.path ?? ''),
@@ -94,8 +107,10 @@ const serveSite: RequestHandler = ({ params, request, url }) =>
 					version: grant?.version
 				}
 			);
+
 			const cacheControl = siteCacheControl(hasGrant, asset.contentType);
 			const ifNoneMatch = request.headers.get('if-none-match');
+
 			const headersFor = (etag: string, size: number) => ({
 				'Cache-Control': cacheControl,
 				'Content-Length': String(size),
@@ -111,9 +126,11 @@ const serveSite: RequestHandler = ({ params, request, url }) =>
 
 			if (request.method === 'HEAD') {
 				const object = yield* blobs.head(asset.r2Key);
+
 				if (!hasGrant && matchesEtag(ifNoneMatch, object.httpEtag)) {
 					return notModifiedResponse(object.httpEtag, cacheControl);
 				}
+
 				return new Response(null, {
 					headers: headersFor(object.httpEtag, object.size)
 				});
@@ -122,6 +139,7 @@ const serveSite: RequestHandler = ({ params, request, url }) =>
 			const conditionalEtag = hasGrant
 				? null
 				: firstIfNoneMatchEtag(ifNoneMatch);
+
 			const countHtmlDownload =
 				asset.contentType === 'text/html' &&
 				!thumbnailSource &&
@@ -129,7 +147,9 @@ const serveSite: RequestHandler = ({ params, request, url }) =>
 
 			if (conditionalEtag === '*') {
 				const object = yield* blobs.head(asset.r2Key);
+
 				if (countHtmlDownload) yield* files.recordDownload(params.id);
+
 				return notModifiedResponse(object.httpEtag, cacheControl);
 			}
 
@@ -140,19 +160,25 @@ const serveSite: RequestHandler = ({ params, request, url }) =>
 							object: yield* blobs.get(asset.r2Key)
 						}
 					: yield* blobs.getIfChanged(asset.r2Key, conditionalEtag);
+
 			if (!loaded.changed) {
 				if (countHtmlDownload) yield* files.recordDownload(params.id);
+
 				return notModifiedResponse(loaded.object.httpEtag, cacheControl);
 			}
+
 			if (!hasGrant && matchesEtag(ifNoneMatch, loaded.object.httpEtag)) {
 				if (countHtmlDownload) yield* files.recordDownload(params.id);
+
 				return notModifiedResponse(loaded.object.httpEtag, cacheControl);
 			}
 
 			const object = loaded.object;
+
 			if (countHtmlDownload) {
 				yield* files.recordDownload(params.id);
 			}
+
 			return new Response(object.body, {
 				headers: headersFor(object.httpEtag, object.size)
 			});

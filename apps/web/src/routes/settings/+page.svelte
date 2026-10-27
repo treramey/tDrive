@@ -13,17 +13,20 @@
 
 	const session = getDashboardSession();
 	const toasts = getToasts();
+
 	const settings = resource(
 		() => [session.ready, session.token] as const,
 		([ready, token], _previous, { signal }) =>
 			ready && token ? listFiles(token, false, signal) : Promise.resolve(null)
 	);
+
 	let signOutEverywhereOpen = $state(false);
 	let signingOut = $state(false);
 
 	const signOutEverywhere = async () => {
 		if (!session.token || signingOut) return;
 		signingOut = true;
+
 		try {
 			await logoutEverywhere(session.token);
 			signOutEverywhereOpen = false;

@@ -10,6 +10,7 @@ describe('Cloudflare Worker facade', () => {
 		expect(source).toContain('ctx.waitUntil(');
 		expect(source).not.toContain('const { waitUntil } = ctx');
 		expect(source).not.toContain('PASSCODE:');
+
 		const executable = source
 			.replace(
 				'import sveltekit from "./_sveltekit.js";',
@@ -17,6 +18,7 @@ describe('Cloudflare Worker facade', () => {
 			)
 			.replace('export * from "./_sveltekit.js";', '')
 			.replace('export default', 'return');
+
 		expect(() => new Function(executable)).not.toThrow();
 	});
 });

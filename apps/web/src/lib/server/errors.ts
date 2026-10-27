@@ -23,7 +23,11 @@ export class StorageError extends Data.TaggedError('StorageError')<{
 }> {}
 
 export type AppError =
-	InvalidRequest | MisdirectedRequest | Unauthorized | NotFound | StorageError;
+	| InvalidRequest
+	| MisdirectedRequest
+	| Unauthorized
+	| NotFound
+	| StorageError;
 
 // Lift a synchronous validator that throws InvalidRequest into the Effect
 // error channel. Calling such a validator bare inside a generator turns a

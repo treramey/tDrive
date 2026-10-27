@@ -26,6 +26,7 @@ export const prepareSiteManifest = (
 	maxUploadBytes: number
 ) => {
 	const displayName = cleanFileName(input.displayName);
+
 	if (input.assets.length === 0 || input.assets.length > MAX_SITE_ASSETS) {
 		throw new InvalidRequest({
 			status: 400,
@@ -35,8 +36,10 @@ export const prepareSiteManifest = (
 
 	const paths = new Set<string>();
 	const assets: Array<PreparedSiteAsset> = [];
+
 	for (const asset of input.assets) {
 		let path: string;
+
 		try {
 			path = normalizeSitePath(asset.path);
 		} catch (cause) {
@@ -46,14 +49,17 @@ export const prepareSiteManifest = (
 					message: `Site asset path is unsafe: ${asset.path}`
 				});
 			}
+
 			throw cause;
 		}
+
 		if (paths.has(path)) {
 			throw new InvalidRequest({
 				status: 400,
 				message: `Site manifest contains a duplicate path: ${path}`
 			});
 		}
+
 		if (
 			!Number.isSafeInteger(asset.sizeBytes) ||
 			asset.sizeBytes < 0 ||
@@ -64,6 +70,7 @@ export const prepareSiteManifest = (
 				message: `Site asset has an invalid size: ${path}`
 			});
 		}
+
 		paths.add(path);
 		assets.push({
 			path,
@@ -92,6 +99,7 @@ export const assertOpenSiteSession = (
 			message: 'Site upload session is no longer open'
 		});
 	}
+
 	if (new Date(session.expiresAt).getTime() <= now.getTime()) {
 		throw new InvalidRequest({
 			status: 409,
@@ -114,20 +122,24 @@ export const validateCommittedAssets = (
 			asset.storedSizeBytes === null ||
 			asset.storedSizeBytes !== asset.expectedSizeBytes
 	);
+
 	if (incomplete) {
 		throw new InvalidRequest({
 			status: 409,
 			message: `Site asset is missing or incomplete: ${incomplete.path}`
 		});
 	}
+
 	return assets.reduce((total, asset) => {
 		const next = total + asset.expectedSizeBytes;
+
 		if (!Number.isSafeInteger(next)) {
 			throw new InvalidRequest({
 				status: 400,
 				message: 'Site asset sizes exceed the supported total'
 			});
 		}
+
 		return next;
 	}, 0);
 };

@@ -17,8 +17,9 @@ describe('MCP handler policy', () => {
 
 	it('keeps write tools off the read-only list', () => {
 		for (const name of WRITE_TOOL_NAMES) {
-			expect((READ_TOOL_NAMES as readonly string[]).includes(name)).toBe(false);
+			expect(new Set<string>(READ_TOOL_NAMES).has(name)).toBe(false);
 		}
+
 		expect(READ_TOOL_NAMES).toContain('search_files');
 		expect(WRITE_TOOL_NAMES).toContain('publish_site');
 	});

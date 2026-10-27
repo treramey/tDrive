@@ -1,17 +1,9 @@
-// Lightweight JSON validators for dashboard API responses.
-//
-// The server owns real validation with Effect Schema; the client only needs
-// to trust the shapes it renders. Using Effect here dragged its runtime into
-// the browser bundle (~120 KB gzipped on top of the dashboard), slowing every
-// first load and hydration. These parsers mirror the server schemas and throw
-// on anything unexpected, keeping the types from @tdrive/shared. Like Effect's
-// Struct decoders, they require every declared field but ignore extra keys.
+import * as z from 'zod/mini';
 import type {
 	PublicKeyCredentialCreationOptionsJSON,
 	PublicKeyCredentialRequestOptionsJSON
 } from '@simplewebauthn/browser';
 import type {
-	Passkey,
 	ApiKey,
 	DashboardFile,
 	FileContentLinkResponse,
@@ -21,376 +13,258 @@ import type {
 	FileSummary,
 	FileTagsResponse,
 	FileVersion,
+	Passkey,
 	Tag,
 	TagResponse,
 	UploadResponse
 } from '@tdrive/shared';
 
-// Response envelopes that @tdrive/shared does not name as types.
-type ApiKeyListResponse = { readonly keys: ReadonlyArray<ApiKey> };
-type ApiKeyCreateResponse = { readonly key: ApiKey; readonly token: string };
-type SessionsRevokedResponse = { readonly revoked: number };
-type SemanticStatus = {
-	readonly enabled: boolean;
-	readonly indexedChunks: number;
-	readonly dimensions: number;
-	readonly model: string;
-	readonly costNotice: string;
-};
+const invalid = { error: 'The server returned unexpected data' };
+const text = z.string(invalid);
+const integer = z.int(invalid);
+const flag = z.boolean(invalid);
+const maybeString = z.nullable(text);
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const fail = (path: string): never => {
-	throw new Error(`The server returned unexpected data at ${path}`);
-};
-
-const requireRecord = (
-	value: unknown,
-	path: string
-): Record<string, unknown> => (isRecord(value) ? value : fail(path));
-
-const text = (value: unknown, path: string): string =>
-	typeof value === 'string' ? value : fail(path);
-
-const integer = (value: unknown, path: string): number =>
-	typeof value === 'number' && Number.isSafeInteger(value) ? value : fail(path);
-
-const flag = (value: unknown, path: string): boolean =>
-	typeof value === 'boolean' ? value : fail(path);
-
-const maybeString = (value: unknown, path: string): string | null => {
-	if (value === null || typeof value === 'string') return value;
-	return fail(path);
-};
-
-const literal = <const A extends string>(
-	value: unknown,
-	allowed: ReadonlyArray<A>,
-	path: string
-): A =>
-	typeof value === 'string' && allowed.includes(value as A)
-		? (value as A)
-		: fail(path);
-
-const list = <A>(
-	value: unknown,
-	each: (item: unknown, path: string) => A,
-	path: string
-): ReadonlyArray<A> => {
-	if (!Array.isArray(value)) return fail(path);
-	return value.map((item: unknown, index: number) =>
-		each(item, `${path}[${index}]`)
-	);
-};
-
-const INDEX_STATES = [
-	'pending',
-	'running',
-	'ready',
-	'failed',
-	'disabled'
-] as const;
-
-const parseFileSummary = (value: unknown, path = 'file'): FileSummary => {
-	const record = requireRecord(value, path);
-	return {
-		id: text(record.id, `${path}.id`),
-		displayName: text(record.displayName, `${path}.displayName`),
-		contentType: text(record.contentType, `${path}.contentType`),
-		kind: literal(record.kind, ['file', 'site'], `${path}.kind`),
-		version: integer(record.version, `${path}.version`),
-		sizeBytes: integer(record.sizeBytes, `${path}.sizeBytes`),
-		public: flag(record.public, `${path}.public`),
-		createdAt: text(record.createdAt, `${path}.createdAt`),
-		expiresAt: maybeString(record.expiresAt, `${path}.expiresAt`),
-		downloadCount: integer(record.downloadCount, `${path}.downloadCount`),
-		lastDownloadAt: maybeString(
-			record.lastDownloadAt,
-			`${path}.lastDownloadAt`
+const fileSummary = z.object(
+	{
+		id: text,
+		displayName: text,
+		contentType: text,
+		kind: z.enum(['file', 'site'], invalid),
+		version: integer,
+		sizeBytes: integer,
+		public: flag,
+		createdAt: text,
+		expiresAt: maybeString,
+		downloadCount: integer,
+		lastDownloadAt: maybeString,
+		indexState: z.enum(
+			['pending', 'running', 'ready', 'failed', 'disabled'],
+			invalid
 		),
-		indexState: literal(record.indexState, INDEX_STATES, `${path}.indexState`),
-		indexedVersion:
-			record.indexedVersion === null
-				? null
-				: integer(record.indexedVersion, `${path}.indexedVersion`),
-		indexAttempts: integer(record.indexAttempts, `${path}.indexAttempts`),
-		indexError: maybeString(record.indexError, `${path}.indexError`)
-	};
-};
+		indexedVersion: z.nullable(integer),
+		indexAttempts: integer,
+		indexError: maybeString
+	},
+	invalid
+) satisfies z.ZodMiniType<FileSummary>;
 
-const parseTag = (value: unknown, path = 'tag'): Tag => {
-	const record = requireRecord(value, path);
-	return {
-		id: text(record.id, `${path}.id`),
-		name: text(record.name, `${path}.name`),
-		normalizedName: text(record.normalizedName, `${path}.normalizedName`),
-		color: maybeString(record.color, `${path}.color`),
-		fileCount: integer(record.fileCount, `${path}.fileCount`),
-		createdAt: text(record.createdAt, `${path}.createdAt`)
-	};
-};
+const tag = z.object(
+	{
+		id: text,
+		name: text,
+		normalizedName: text,
+		color: maybeString,
+		fileCount: integer,
+		createdAt: text
+	},
+	invalid
+) satisfies z.ZodMiniType<Tag>;
 
-const parseDashboardFile = (value: unknown, path = 'file'): DashboardFile => {
-	const record = requireRecord(value, path);
-	return {
-		...parseFileSummary(value, path),
-		deletedAt: maybeString(record.deletedAt, `${path}.deletedAt`),
-		updatedAt: text(record.updatedAt, `${path}.updatedAt`),
-		htmlForcedPublic: flag(record.htmlForcedPublic, `${path}.htmlForcedPublic`),
-		tags: list(record.tags, (item) => parseTag(item), `${path}.tags`)
-	};
-};
+const dashboardFile = z.extend(fileSummary, {
+	deletedAt: maybeString,
+	updatedAt: text,
+	htmlForcedPublic: flag,
+	tags: z.array(tag, invalid)
+}) satisfies z.ZodMiniType<DashboardFile>;
 
-const parseFileVersion = (value: unknown, path = 'version'): FileVersion => {
-	const record = requireRecord(value, path);
-	return {
-		version: integer(record.version, `${path}.version`),
-		sizeBytes: integer(record.sizeBytes, `${path}.sizeBytes`),
-		contentType: text(record.contentType, `${path}.contentType`),
-		createdAt: text(record.createdAt, `${path}.createdAt`)
-	};
-};
+const fileVersion = z.object(
+	{
+		version: integer,
+		sizeBytes: integer,
+		contentType: text,
+		createdAt: text
+	},
+	invalid
+) satisfies z.ZodMiniType<FileVersion>;
 
-const parseSemanticStatus = (
-	value: unknown,
-	path = 'semantic'
-): SemanticStatus => {
-	const record = requireRecord(value, path);
-	return {
-		enabled: flag(record.enabled, `${path}.enabled`),
-		indexedChunks: integer(record.indexedChunks, `${path}.indexedChunks`),
-		dimensions: integer(record.dimensions, `${path}.dimensions`),
-		model: text(record.model, `${path}.model`),
-		costNotice: text(record.costNotice, `${path}.costNotice`)
-	};
-};
+const semanticStatus = z.object(
+	{
+		enabled: flag,
+		indexedChunks: integer,
+		dimensions: integer,
+		model: text,
+		costNotice: text
+	},
+	invalid
+);
 
-export const parseFileListResponse = (value: unknown): FileListResponse => {
-	const record = requireRecord(value, 'files');
-	return {
-		files: list(record.files, parseDashboardFile, 'files.files'),
-		nextCursor: maybeString(record.nextCursor, 'files.nextCursor'),
-		tags: list(record.tags, parseTag, 'files.tags'),
-		contentOrigin: text(record.contentOrigin, 'files.contentOrigin'),
-		maxUploadBytes: integer(record.maxUploadBytes, 'files.maxUploadBytes'),
-		semantic: parseSemanticStatus(record.semantic, 'files.semantic')
-	};
-};
+const fileListResponse: z.ZodMiniType<FileListResponse> = z.object(
+	{
+		files: z.array(dashboardFile, invalid),
+		nextCursor: maybeString,
+		tags: z.array(tag, invalid),
+		contentOrigin: text,
+		maxUploadBytes: integer,
+		semantic: semanticStatus
+	},
+	invalid
+);
 
-export const parseFileDetailResponse = (value: unknown): FileDetailResponse => {
-	const record = requireRecord(value, 'detail');
-	return {
-		file: parseDashboardFile(record.file, 'detail.file'),
-		versions: list(record.versions, parseFileVersion, 'detail.versions'),
-		nextVersionsCursor: maybeString(
-			record.nextVersionsCursor,
-			'detail.nextVersionsCursor'
+const fileDetailResponse: z.ZodMiniType<FileDetailResponse> = z.object(
+	{
+		file: dashboardFile,
+		versions: z.array(fileVersion, invalid),
+		nextVersionsCursor: maybeString,
+		availableTags: z.array(tag, invalid),
+		contentOrigin: text,
+		maxUploadBytes: integer,
+		semanticEnabled: flag
+	},
+	invalid
+);
+
+const fileContentLink: z.ZodMiniType<FileContentLinkResponse> = z.object(
+	{
+		url: text,
+		expiresAt: maybeString,
+		version: integer,
+		public: flag
+	},
+	invalid
+);
+
+const fileMutationResponse: z.ZodMiniType<FileMutationResponse> = z.object(
+	{
+		file: dashboardFile,
+		forcedPublic: flag
+	},
+	invalid
+);
+
+const fileTagsResponse: z.ZodMiniType<FileTagsResponse> = z.object(
+	{ file: dashboardFile },
+	invalid
+);
+
+const uploadResponse: z.ZodMiniType<UploadResponse> = z.object(
+	{
+		file: fileSummary,
+		url: text,
+		forcedPublic: flag
+	},
+	invalid
+);
+
+const tagResponse: z.ZodMiniType<TagResponse> = z.object({ tag }, invalid);
+
+const apiKey = z.object(
+	{
+		id: text,
+		name: text,
+		prefix: text,
+		scope: z.enum(['read-only', 'read-write'], invalid),
+		createdAt: text,
+		expiresAt: maybeString,
+		lastUsedAt: maybeString,
+		revokedAt: maybeString
+	},
+	invalid
+) satisfies z.ZodMiniType<ApiKey>;
+
+const passkey = z.object(
+	{
+		id: text,
+		name: text,
+		createdAt: text,
+		lastUsedAt: maybeString,
+		deviceType: z.enum(['singleDevice', 'multiDevice'], invalid),
+		backedUp: flag,
+		currentSession: flag
+	},
+	invalid
+) satisfies z.ZodMiniType<Passkey>;
+
+const ceremonyId = z.string(invalid).check(z.regex(/^[0-9a-f]{32}$/, invalid));
+
+const loginOptions = z.object(
+	{
+		challenge: text,
+		rpId: text,
+		timeout: integer,
+		userVerification: z.literal('required', invalid)
+	},
+	invalid
+) satisfies z.ZodMiniType<PublicKeyCredentialRequestOptionsJSON>;
+
+const enrollOptions = z.object(
+	{
+		challenge: text,
+		timeout: integer,
+		rp: z.object({ id: text, name: text }, invalid),
+		user: z.object({ id: text, name: text, displayName: text }, invalid),
+		attestation: z.literal('none', invalid),
+		authenticatorSelection: z.object(
+			{
+				residentKey: z.literal('required', invalid),
+				userVerification: z.literal('required', invalid)
+			},
+			invalid
 		),
-		availableTags: list(record.availableTags, parseTag, 'detail.availableTags'),
-		contentOrigin: text(record.contentOrigin, 'detail.contentOrigin'),
-		maxUploadBytes: integer(record.maxUploadBytes, 'detail.maxUploadBytes'),
-		semanticEnabled: flag(record.semanticEnabled, 'detail.semanticEnabled')
-	};
-};
-
-export const parseFileContentLink = (
-	value: unknown
-): FileContentLinkResponse => {
-	const record = requireRecord(value, 'link');
-	return {
-		url: text(record.url, 'link.url'),
-		expiresAt: maybeString(record.expiresAt, 'link.expiresAt'),
-		version: integer(record.version, 'link.version'),
-		public: flag(record.public, 'link.public')
-	};
-};
-
-export const parseFileMutationResponse = (
-	value: unknown
-): FileMutationResponse => {
-	const record = requireRecord(value, 'mutation');
-	return {
-		file: parseDashboardFile(record.file, 'mutation.file'),
-		forcedPublic: flag(record.forcedPublic, 'mutation.forcedPublic')
-	};
-};
-
-export const parseFileTagsResponse = (value: unknown): FileTagsResponse => {
-	const record = requireRecord(value, 'tags');
-	return {
-		file: parseDashboardFile(record.file, 'tags.file')
-	};
-};
-
-export const parseUploadResponse = (value: unknown): UploadResponse => {
-	const record = requireRecord(value, 'upload');
-	return {
-		file: parseFileSummary(record.file, 'upload.file'),
-		url: text(record.url, 'upload.url'),
-		forcedPublic: flag(record.forcedPublic, 'upload.forcedPublic')
-	};
-};
-
-export const parseTagResponse = (value: unknown): TagResponse => {
-	const record = requireRecord(value, 'tag');
-	return {
-		tag: parseTag(record.tag, 'tag.tag')
-	};
-};
-
-const parseApiKey = (value: unknown, path = 'key'): ApiKey => {
-	const record = requireRecord(value, path);
-	return {
-		id: text(record.id, `${path}.id`),
-		name: text(record.name, `${path}.name`),
-		prefix: text(record.prefix, `${path}.prefix`),
-		scope: literal(record.scope, ['read-only', 'read-write'], `${path}.scope`),
-		createdAt: text(record.createdAt, `${path}.createdAt`),
-		expiresAt: maybeString(record.expiresAt, `${path}.expiresAt`),
-		lastUsedAt: maybeString(record.lastUsedAt, `${path}.lastUsedAt`),
-		revokedAt: maybeString(record.revokedAt, `${path}.revokedAt`)
-	};
-};
-
-export const parseApiKeyListResponse = (value: unknown): ApiKeyListResponse => {
-	const record = requireRecord(value, 'keys');
-	return {
-		keys: list(record.keys, parseApiKey, 'keys.keys')
-	};
-};
-
-export const parseApiKeyCreateResponse = (
-	value: unknown
-): ApiKeyCreateResponse => {
-	const record = requireRecord(value, 'key');
-	return {
-		key: parseApiKey(record.key, 'key.key'),
-		token: text(record.token, 'key.token')
-	};
-};
-
-export const parseSessionsRevokedResponse = (
-	value: unknown
-): SessionsRevokedResponse => {
-	const record = requireRecord(value, 'sessions');
-	return {
-		revoked: integer(record.revoked, 'sessions.revoked')
-	};
-};
-
-export const parsePasskeyList = (value: unknown): ReadonlyArray<Passkey> => {
-	const record = requireRecord(value, 'passkeys');
-	return list(
-		record.passkeys,
-		(item, path) => {
-			const row = requireRecord(item, path);
-			return {
-				id: text(row.id, `${path}.id`),
-				name: text(row.name, `${path}.name`),
-				createdAt: text(row.createdAt, `${path}.createdAt`),
-				lastUsedAt: maybeString(row.lastUsedAt, `${path}.lastUsedAt`),
-				deviceType: literal(
-					row.deviceType,
-					['singleDevice', 'multiDevice'],
-					`${path}.deviceType`
-				),
-				backedUp: flag(row.backedUp, `${path}.backedUp`),
-				currentSession: flag(row.currentSession, `${path}.currentSession`)
-			};
-		},
-		'passkeys'
-	);
-};
-
-export const parsePasskeyRemoval = (value: unknown) => ({
-	signedOut: flag(
-		requireRecord(value, 'removal').signedOut,
-		'removal.signedOut'
-	)
-});
-
-const passkeyOptions = (value: unknown) => {
-	const envelope = requireRecord(value, 'passkey');
-	const ceremonyId = text(envelope.ceremonyId, 'passkey.ceremonyId');
-	if (!/^[0-9a-f]{32}$/.test(ceremonyId)) fail('passkey.ceremonyId');
-	return {
-		ceremonyId,
-		options: requireRecord(envelope.options, 'passkey.options')
-	};
-};
-
-export const parsePasskeyLoginOptions = (value: unknown) => {
-	const { ceremonyId, options } = passkeyOptions(value);
-	const parsed: PublicKeyCredentialRequestOptionsJSON = {
-		challenge: text(options.challenge, 'options.challenge'),
-		rpId: text(options.rpId, 'options.rpId'),
-		timeout: integer(options.timeout, 'options.timeout'),
-		userVerification: literal(
-			options.userVerification,
-			['required'],
-			'options.userVerification'
+		pubKeyCredParams: z.array(
+			z.object(
+				{
+					type: z.literal('public-key', invalid),
+					alg: integer
+				},
+				invalid
+			),
+			invalid
+		),
+		excludeCredentials: z.array(
+			z.object(
+				{
+					type: z.literal('public-key', invalid),
+					id: text
+				},
+				invalid
+			),
+			invalid
 		)
-	};
-	return { ceremonyId, options: parsed };
-};
+	},
+	invalid
+) satisfies z.ZodMiniType<PublicKeyCredentialCreationOptionsJSON>;
 
-export const parsePasskeyEnrollOptions = (value: unknown) => {
-	const { ceremonyId, options } = passkeyOptions(value);
-	const rp = requireRecord(options.rp, 'options.rp');
-	const user = requireRecord(options.user, 'options.user');
-	const selection = requireRecord(
-		options.authenticatorSelection,
-		'options.authenticatorSelection'
-	);
-	const parsed: PublicKeyCredentialCreationOptionsJSON = {
-		challenge: text(options.challenge, 'options.challenge'),
-		timeout: integer(options.timeout, 'options.timeout'),
-		rp: { id: text(rp.id, 'rp.id'), name: text(rp.name, 'rp.name') },
-		user: {
-			id: text(user.id, 'user.id'),
-			name: text(user.name, 'user.name'),
-			displayName: text(user.displayName, 'user.displayName')
-		},
-		attestation: literal(options.attestation, ['none'], 'options.attestation'),
-		authenticatorSelection: {
-			residentKey: literal(selection.residentKey, ['required'], 'residentKey'),
-			userVerification: literal(
-				selection.userVerification,
-				['required'],
-				'userVerification'
-			)
-		},
-		pubKeyCredParams: [
-			...list(
-				options.pubKeyCredParams,
-				(item) => {
-					const param = requireRecord(item, 'pubKeyCredParams');
-					return {
-						type: literal(param.type, ['public-key'], 'pubKeyCredParams.type'),
-						alg: integer(param.alg, 'pubKeyCredParams.alg')
-					};
-				},
-				'pubKeyCredParams'
-			)
-		],
-		excludeCredentials: [
-			...list(
-				options.excludeCredentials,
-				(item) => {
-					const credential = requireRecord(item, 'excludeCredentials');
-					return {
-						type: literal(
-							credential.type,
-							['public-key'],
-							'excludeCredentials.type'
-						),
-						id: text(credential.id, 'excludeCredentials.id')
-					};
-				},
-				'excludeCredentials'
-			)
-		]
-	};
-	return { ceremonyId, options: parsed };
-};
+export const parseFileListResponse = fileListResponse.parse;
+export const parseFileDetailResponse = fileDetailResponse.parse;
+export const parseFileContentLink = fileContentLink.parse;
+export const parseFileMutationResponse = fileMutationResponse.parse;
+export const parseFileTagsResponse = fileTagsResponse.parse;
+export const parseUploadResponse = uploadResponse.parse;
+export const parseTagResponse = tagResponse.parse;
+
+export const parseApiKeyListResponse = z.object(
+	{ keys: z.array(apiKey, invalid) },
+	invalid
+).parse;
+
+export const parseApiKeyCreateResponse = z.object(
+	{ key: apiKey, token: text },
+	invalid
+).parse;
+
+export const parseSessionsRevokedResponse = z.object(
+	{ revoked: integer },
+	invalid
+).parse;
+
+const passkeyList = z.object({ passkeys: z.array(passkey, invalid) }, invalid);
+
+export const parsePasskeyList = z.pipe(
+	passkeyList,
+	z.transform((response) => response.passkeys)
+).parse;
+
+export const parsePasskeyRemoval = z.object({ signedOut: flag }, invalid).parse;
+
+export const parsePasskeyLoginOptions = z.object(
+	{ ceremonyId, options: loginOptions },
+	invalid
+).parse;
+
+export const parsePasskeyEnrollOptions = z.object(
+	{ ceremonyId, options: enrollOptions },
+	invalid
+).parse;
+
+export const parseErrorMessage = z.object({ message: text }).safeParse;

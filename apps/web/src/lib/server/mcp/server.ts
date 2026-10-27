@@ -58,6 +58,7 @@ const toolValue = async <A, E>(
 	program: Effect.Effect<A, E, AppServices>
 ) => {
 	const result = await runMcp(env, program);
+
 	return result.ok
 		? jsonResult(result.value)
 		: errorResult(result.message, result.status);
@@ -77,10 +78,13 @@ export const createTdriveMcpServer = (input: McpServerInput) => {
 		name: 'tdrive',
 		version: '0.1.0'
 	});
+
 	registerReadTools(server, input);
+
 	if (input.credential.scope === 'read-write') {
 		registerWriteTools(server, input);
 	}
+
 	return server;
 };
 
@@ -98,6 +102,7 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 				env,
 				Effect.gen(function* () {
 					const config = yield* AppConfig;
+
 					return {
 						kind: credential.kind,
 						scope: credential.scope,
@@ -129,6 +134,7 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 					let siteCount = 0;
 					let publicFiles = 0;
 					let totalBytes = 0;
+
 					do {
 						const page: {
 							readonly files: ReadonlyArray<DashboardFile>;
@@ -137,24 +143,30 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 							cursor,
 							limit: MCP_STATUS_PAGE_SIZE
 						});
+
 						for (const item of page.files) {
 							if (item.kind === 'site') {
 								siteCount += 1;
 							} else {
 								fileCount += 1;
+
 								if (item.public) publicFiles += 1;
 							}
+
 							totalBytes += item.sizeBytes;
 						}
+
 						cursor = page.nextCursor;
 						pages += 1;
 					} while (cursor !== null && pages < MCP_STATUS_PAGE_CAP);
+
 					if (cursor !== null) {
 						return yield* new InvalidRequest({
 							status: 400,
 							message: `Listing stopped after ${MCP_STATUS_PAGE_CAP} pages with more remaining`
 						});
 					}
+
 					return {
 						connected: true,
 						files: fileCount,
@@ -186,10 +198,12 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 				env,
 				Effect.gen(function* () {
 					const files = yield* Files;
+
 					const page = {
 						cursor: cursor ?? null,
 						limit: yield* validate(() => mcpPageLimit(limit))
 					};
+
 					return yield* files.list(false, page);
 				})
 			)
@@ -210,11 +224,13 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 				env,
 				Effect.gen(function* () {
 					const search = yield* Search;
+
 					const page = yield* search.files({
 						query,
 						tagIds: (tag_ids ?? []).slice(0, 20),
 						cursor: cursor ?? null
 					});
+
 					return {
 						files: page.files,
 						nextCursor: page.nextCursor
@@ -242,6 +258,7 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 					const config = yield* AppConfig;
 					const detail = yield* files.detail(id);
 					const now = new Date().toISOString();
+
 					if (!fileIsLive(detail.file, now)) {
 						return {
 							file: detail.file,
@@ -250,6 +267,7 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 							public: detail.file.public
 						};
 					}
+
 					if (detail.file.kind === 'site') {
 						return {
 							file: detail.file,
@@ -258,22 +276,29 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 							public: true
 						};
 					}
+
 					const link = yield* resolveFileContentLink(id);
+
 					if (include_text !== true) {
 						return { file: detail.file, ...link };
 					}
+
 					const kind = previewKind(
 						detail.file.displayName,
 						detail.file.contentType
 					);
+
 					if (kind === null) {
 						return { file: detail.file, ...link };
 					}
+
 					const content = yield* files.findContent(id);
+
 					const text = yield* blobs.readTextPrefix(
 						content.r2Key,
 						maxPreviewBytes
 					);
+
 					return {
 						file: detail.file,
 						...link,
@@ -295,6 +320,7 @@ const registerReadTools = (server: McpServer, input: McpServerInput) => {
 				env,
 				Effect.gen(function* () {
 					const tags = yield* Tags;
+
 					return { tags: yield* tags.list };
 				})
 			)
@@ -321,28 +347,34 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 		},
 		async (args) => {
 			const decoded = decodeExclusiveContent(args);
+
 			if (!decoded.ok) return errorResult(decoded.message, decoded.status);
+
 			const uploaded = await runMcp(
 				env,
 				Effect.gen(function* () {
 					const authGuard = yield* AuthGuard;
 					const files = yield* Files;
 					const config = yield* AppConfig;
+
 					const rate = yield* authGuard.consume(
 						'upload',
 						credential.credentialId
 					);
+
 					if (!rate.allowed) {
 						return {
 							kind: 'rate-limit' as const,
 							message: 'Too many uploads. Try again later.'
 						};
 					}
+
 					const expiresAt = yield* validate(() =>
 						args.expires_at === undefined
 							? null
 							: validateExpiration(args.expires_at)
 					);
+
 					const result = yield* files.upload({
 						displayName: args.name,
 						contentType:
@@ -356,6 +388,7 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 						tags: args.tags ?? [],
 						expiresAt
 					});
+
 					return {
 						kind: 'ok' as const,
 						file: result.file,
@@ -364,12 +397,16 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 					};
 				})
 			);
+
 			if (!uploaded.ok) return errorResult(uploaded.message, uploaded.status);
+
 			if (uploaded.value.kind === 'rate-limit') {
 				return errorResult(uploaded.value.message, 429);
 			}
+
 			scheduleIndex(env, ctx, uploaded.value.file.id);
 			const { kind: _kind, ...value } = uploaded.value;
+
 			return jsonResult(value);
 		}
 	);
@@ -388,11 +425,14 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 				env,
 				Effect.gen(function* () {
 					const files = yield* Files;
+
 					return yield* files.rename(id, display_name);
 				})
 			);
+
 			if (!result.ok) return errorResult(result.message, result.status);
 			scheduleIndex(env, ctx, result.value.file.id);
+
 			return jsonResult(result.value);
 		}
 	);
@@ -411,6 +451,7 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 				env,
 				Effect.gen(function* () {
 					const tags = yield* Tags;
+
 					return { tag: yield* tags.create({ name, color }) };
 				})
 			)
@@ -431,6 +472,7 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 				env,
 				Effect.gen(function* () {
 					const tags = yield* Tags;
+
 					return { tag: yield* tags.update(id, { name, color }) };
 				})
 			)
@@ -450,6 +492,7 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 				Effect.gen(function* () {
 					const tags = yield* Tags;
 					yield* tags.remove(id);
+
 					return { ok: true as const, id };
 				})
 			)
@@ -471,6 +514,7 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 					const tags = yield* Tags;
 					const files = yield* Files;
 					yield* tags.setFileTags(file_id, names);
+
 					return { file: (yield* files.detail(file_id)).file };
 				})
 			)
@@ -500,50 +544,61 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 				bytes: Uint8Array;
 				contentType: string;
 			}> = [];
+
 			let totalBytes = 0;
+
 			for (const asset of args.assets) {
 				const content = decodeExclusiveContent(asset);
+
 				if (!content.ok) {
 					return errorResult(
 						`${asset.path}: ${content.message}`,
 						content.status
 					);
 				}
+
 				totalBytes += content.bytes.byteLength;
+
 				if (totalBytes > MCP_MAX_SITE_TOTAL_BYTES) {
 					return errorResult('Site assets exceed the 8 MiB MCP total', 413);
 				}
+
 				decoded.push({
 					path: asset.path,
 					bytes: content.bytes,
 					contentType: asset.content_type ?? 'application/octet-stream'
 				});
 			}
+
 			const published = await runMcp(
 				env,
 				Effect.gen(function* () {
 					const authGuard = yield* AuthGuard;
 					const sites = yield* Sites;
 					const config = yield* AppConfig;
+
 					const rate = yield* authGuard.consume(
 						'upload',
 						credential.credentialId
 					);
+
 					if (!rate.allowed) {
 						return {
 							kind: 'rate-limit' as const,
 							message: 'Too many uploads. Try again later.'
 						};
 					}
+
 					const session = yield* sites.createSession({
 						displayName: args.display_name,
-						...(args.file_id !== undefined ? { fileId: args.file_id } : {}),
+						fileId: args.file_id,
 						assets: decoded.map((asset) => ({
 							path: asset.path,
 							sizeBytes: asset.bytes.byteLength,
 							contentType: asset.contentType
 						}))
 					});
+
 					const committed = yield* Effect.gen(function* () {
 						for (const asset of decoded) {
 							yield* sites.stageAsset({
@@ -553,6 +608,7 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 								body: bytesToStream(asset.bytes)
 							});
 						}
+
 						return yield* sites.commit(session.sessionId);
 					}).pipe(
 						Effect.catch((failure) =>
@@ -562,6 +618,7 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 							)
 						)
 					);
+
 					return {
 						kind: 'ok' as const,
 						file: committed.file,
@@ -571,13 +628,17 @@ const registerWriteTools = (server: McpServer, input: McpServerInput) => {
 					};
 				})
 			);
+
 			if (!published.ok)
 				return errorResult(published.message, published.status);
+
 			if (published.value.kind === 'rate-limit') {
 				return errorResult(published.value.message, 429);
 			}
+
 			scheduleIndex(env, ctx, published.value.file.id);
 			const { kind: _kind, ...value } = published.value;
+
 			return jsonResult(value);
 		}
 	);

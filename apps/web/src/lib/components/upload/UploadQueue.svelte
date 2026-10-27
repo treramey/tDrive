@@ -6,6 +6,7 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 
 	let { uploads }: { uploads: UploadManager } = $props();
+
 	const hasDismissable = $derived(
 		uploads.items.some(
 			(item) => item.status === 'done' || item.status === 'cancelled'

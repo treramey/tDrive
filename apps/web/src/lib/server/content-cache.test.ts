@@ -62,6 +62,7 @@ describe('content cache policy', () => {
 			'"abc"',
 			PUBLIC_IMMUTABLE_CACHE_CONTROL
 		);
+
 		expect(response.status).toBe(304);
 		expect(response.headers.get('ETag')).toBe('"abc"');
 		expect(response.headers.get('Cache-Control')).toBe(
@@ -80,12 +81,15 @@ describe('content cache policy', () => {
 		const previewRequest = fileContentCacheRequest(
 			new URL('https://files.example/f/id?v=3&e=1&g=sig&preview=dashboard')
 		);
+
 		const contentRequest = fileContentCacheRequest(
 			new URL('https://files.example/f/id?v=3&e=1&g=sig')
 		);
+
 		const currentRequest = fileContentCacheRequest(
 			new URL('https://files.example/f/id')
 		);
+
 		expect(previewRequest.url).toBe(
 			'https://files.example/f/id?v=3&preview=dashboard'
 		);
@@ -108,23 +112,28 @@ describe('content cache policy', () => {
 
 	it('detects an R2 object that still has a body', () => {
 		expect(
+			// SAFETY: body detection only reads arrayBuffer membership; the remaining R2 metadata is irrelevant to this unit test.
 			isR2ObjectBody({
 				httpEtag: '"abc"',
 				arrayBuffer: async () => new ArrayBuffer(0)
 			} as R2ObjectBody)
 		).toBe(true);
+		// SAFETY: this fixture deliberately omits arrayBuffer to exercise the metadata-only branch.
 		expect(isR2ObjectBody({ httpEtag: '"abc"' } as R2Object)).toBe(false);
 	});
 
 	it('reads and stores public responses in the Workers Cache API', async () => {
 		const stored = new Map<string, Response>();
+
 		const cache = {
 			match: vi.fn(async (request: Request) => stored.get(request.url)),
 			put: vi.fn(async (request: Request, response: Response) => {
 				stored.set(request.url, response);
 			})
 		};
+
 		const pending: Promise<unknown>[] = [];
+
 		const platform = {
 			caches: { default: cache },
 			ctx: {
@@ -133,6 +142,7 @@ describe('content cache policy', () => {
 				}
 			}
 		};
+
 		const request = new Request('https://files.example/t/id/1/grid.webp');
 		await expect(
 			Effect.runPromise(matchEdgeCache(platform, request))
@@ -142,6 +152,7 @@ describe('content cache policy', () => {
 			status: 200,
 			headers: { 'Cache-Control': PUBLIC_IMMUTABLE_CACHE_CONTROL }
 		});
+
 		storeEdgeCache(platform, request, response);
 		await Promise.all(pending);
 		expect(cache.put).toHaveBeenCalledOnce();
@@ -158,13 +169,16 @@ describe('content cache policy', () => {
 				ETag: '"abc"'
 			}
 		});
+
 		// Mirror the Workers Cache API, whose responses reject header writes.
 		immutable.headers.set = () => {
 			throw new TypeError("Can't modify immutable headers.");
 		};
+
 		const platform = {
 			caches: { default: { match: vi.fn(async () => immutable), put: vi.fn() } }
 		};
+
 		const request = new Request('https://files.example/f/id?v=1');
 
 		const cached = await Effect.runPromise(matchEdgeCache(platform, request));

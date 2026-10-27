@@ -21,6 +21,7 @@ const mint = () =>
 describe('private file grants', () => {
 	it('validates repeatedly on the content origin during its short lifetime', async () => {
 		const grant = await mint();
+
 		const verify = (at: Date) =>
 			verifyPrivateGrant({
 				signingKey,
@@ -44,6 +45,7 @@ describe('private file grants', () => {
 
 	it('binds grants to the configured host, file, and resolved version', async () => {
 		const grant = await mint();
+
 		const base = {
 			signingKey,
 			contentOrigin,
@@ -78,6 +80,7 @@ describe('private file grants', () => {
 			purpose: 'thumbnail-source',
 			now
 		});
+
 		const base = {
 			signingKey,
 			contentOrigin,
@@ -107,6 +110,7 @@ describe('private file grants', () => {
 
 	it('rejects expired and tampered grants', async () => {
 		const grant = await mint();
+
 		const base = {
 			signingKey,
 			contentOrigin,

@@ -6,7 +6,7 @@ import {
 	isValidationError,
 	type RequestEvent
 } from '@sveltejs/kit';
-import { Cause, Effect, Exit } from 'effect';
+import { Cause, Effect, Exit, Match } from 'effect';
 import type { SqlClient } from 'effect/unstable/sql';
 import {
 	InvalidRequest,
@@ -57,30 +57,29 @@ const throwAppError = (
 	failure: AppError,
 	cause: Cause.Cause<unknown>
 ): never => {
-	switch (failure._tag) {
-		case 'InvalidRequest':
-			error(failure.status, failure.message);
-		case 'MisdirectedRequest':
-			error(421, failure.message);
-		case 'Unauthorized':
-			error(401, failure.message);
-		case 'NotFound':
-			error(404, 'Not found');
-		case 'StorageError':
+	return Match.value(failure).pipe(
+		Match.tag('InvalidRequest', (value) => error(value.status, value.message)),
+		Match.tag('MisdirectedRequest', (value) => error(421, value.message)),
+		Match.tag('Unauthorized', (value) => error(401, value.message)),
+		Match.tag('NotFound', () => error(404, 'Not found')),
+		Match.tag('StorageError', (value) => {
 			console.error(
 				JSON.stringify({
 					message: 'storage operation failed',
-					operation: failure.operation,
+					operation: value.operation,
 					cause: Cause.pretty(cause)
 				})
 			);
-			error(502, 'Storage unavailable');
-	}
+
+			return error(502, 'Storage unavailable');
+		}),
+		Match.exhaustive
+	);
 };
 
 const throwCauseAsHttp = (cause: Cause.Cause<unknown>): never => {
 	const dieDefects = cause.reasons
-		.filter((reason) => reason._tag === 'Die')
+		.filter(Cause.isDieReason)
 		.map((reason) => reason.defect);
 
 	// SvelteKit's own control-flow objects always take precedence.
@@ -111,6 +110,7 @@ const throwCauseAsHttp = (cause: Cause.Cause<unknown>): never => {
 	// (a call-site bug — it should be yielded). Map the first to its
 	// intended status so the client isn't handed a blanket 500, and log it.
 	const appDefect = dieDefects.find(isAppError);
+
 	if (appDefect) {
 		console.error(
 			JSON.stringify({
@@ -119,13 +119,16 @@ const throwCauseAsHttp = (cause: Cause.Cause<unknown>): never => {
 				cause: Cause.pretty(cause)
 			})
 		);
+
 		return throwAppError(appDefect, cause);
 	}
 
 	for (const reason of cause.reasons) {
-		if (reason._tag !== 'Fail') continue;
+		if (!Cause.isFailReason(reason)) continue;
 		const failure = reason.error;
+
 		if (!isAppError(failure)) continue;
+
 		return throwAppError(failure, cause);
 	}
 
@@ -143,17 +146,21 @@ const runWithEvent = async <A, E>(
 	program: Effect.Effect<A, E, AppServices>
 ) => {
 	const env = event.platform?.env;
+
 	if (!env) error(500, 'Cloudflare bindings unavailable');
 
 	const exit = await Effect.runPromiseExit(
 		program.pipe(Effect.provide(requestLayer(env)))
 	);
+
 	if (Exit.isSuccess(exit)) return exit.value;
+
 	return throwCauseAsHttp(exit.cause);
 };
 
 export const runEdge = <A, E>(program: Effect.Effect<A, E, AppServices>) => {
 	const event = getRequestEvent();
+
 	return runWithEvent(event, program);
 };
 
@@ -167,6 +174,7 @@ export const runWorkerProgram = async <A, E>(
 	const exit = await Effect.runPromiseExit(
 		program.pipe(Effect.provide(requestLayer(env)))
 	);
+
 	if (Exit.isSuccess(exit)) return exit.value;
 	throw new Error(Cause.pretty(exit.cause));
 };

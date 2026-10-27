@@ -19,6 +19,7 @@ export const PUT: RequestHandler = ({ cookies, params, request, url }) =>
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			const input = yield* readNames(request);
 			yield* tags.setFileTags(params.id, input.names);
+
 			return Response.json({ file: (yield* files.detail(params.id)).file });
 		})
 	);

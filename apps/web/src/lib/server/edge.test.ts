@@ -1,4 +1,4 @@
-import { Cause } from 'effect';
+import { Cause, Data } from 'effect';
 import { isHttpError } from '@sveltejs/kit';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -10,8 +10,6 @@ import {
 } from './errors';
 import { handleCause, isAppError } from './edge';
 
-vi.mock('$app/server', () => ({ getRequestEvent: vi.fn() }));
-
 const captureHttpError = (cause: Cause.Cause<unknown>) => {
 	try {
 		handleCause(cause);
@@ -19,6 +17,7 @@ const captureHttpError = (cause: Cause.Cause<unknown>) => {
 		if (isHttpError(failure)) return failure;
 		throw failure;
 	}
+
 	throw new Error('Expected handleCause to throw');
 };
 
@@ -54,12 +53,15 @@ describe('Effect edge failures', () => {
 
 	it('sanitizes unknown typed failures even if they imitate a known tag', () => {
 		const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
 		const failure = captureHttpError(
-			Cause.fail({
-				_tag: 'InvalidRequest',
-				status: 418,
-				message: 'internal secret'
-			})
+			Cause.fail(
+				Data.taggedEnum<{
+					readonly _tag: 'InvalidRequest';
+					readonly status: number;
+					readonly message: string;
+				}>().InvalidRequest({ status: 418, message: 'internal secret' })
+			)
 		);
 
 		expect(failure.status).toBe(500);

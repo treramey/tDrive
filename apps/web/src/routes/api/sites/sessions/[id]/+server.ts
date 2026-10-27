@@ -11,6 +11,7 @@ export const DELETE: RequestHandler = ({ cookies, params, request, url }) =>
 			const sites = yield* Sites;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			yield* sites.abort(params.id);
+
 			return new Response(null, { status: 204 });
 		})
 	);

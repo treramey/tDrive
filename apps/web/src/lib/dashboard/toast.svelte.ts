@@ -32,6 +32,7 @@ export class Toasts {
 
 	remove(id: string) {
 		const timer = this.#timers.get(id);
+
 		if (timer) clearTimeout(timer);
 		this.#timers.delete(id);
 		this.items = this.items.filter((item) => item.id !== id);

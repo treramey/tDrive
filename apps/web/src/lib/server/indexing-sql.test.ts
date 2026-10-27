@@ -35,6 +35,7 @@ const makeDatabase = () => {
 	database.exec(migration('0002_tags_search.sql'));
 	database.exec(migration('0005_semantic_lifecycle.sql'));
 	database.exec(migration('0006_index_leases.sql'));
+
 	return database;
 };
 
@@ -43,11 +44,14 @@ const runCommands = (
 	commands: ReadonlyArray<SqlCommand>
 ) => {
 	database.exec('BEGIN');
+
 	try {
 		const changes = commands.map((command) =>
 			Number(database.prepare(command.sql).run(...command.bindings).changes)
 		);
+
 		database.exec('COMMIT');
+
 		return changes;
 	} catch (cause) {
 		database.exec('ROLLBACK');
@@ -62,6 +66,7 @@ const seedVersion = (
 	state: 'pending' | 'running' = 'pending'
 ) => {
 	const now = '2026-07-27T00:00:00.000Z';
+
 	if (version === 1) {
 		database
 			.prepare(
@@ -82,6 +87,7 @@ const seedVersion = (
 			)
 			.run(version, state, fileId);
 	}
+
 	database
 		.prepare(
 			`INSERT INTO file_versions (
@@ -116,6 +122,7 @@ const claim = (database: DatabaseSync, value: IndexLease) =>
 
 const chunksAndIds = (value: IndexLease, text: string) => {
 	const chunks = chunkSearchText('race.txt', text);
+
 	return {
 		chunks,
 		vectorIds: chunks.map((chunk) =>
@@ -143,6 +150,7 @@ describe('lease-guarded semantic indexing SQL', () => {
 			runCommands(database, extractedTextCommands(v2, 'version two'))[1]
 		).toBe(1);
 		const v2Index = chunksAndIds(v2, 'version two');
+
 		const v2Commit = runCommands(
 			database,
 			semanticCommitCommands(
@@ -152,6 +160,7 @@ describe('lease-guarded semantic indexing SQL', () => {
 				'2026-07-27T00:01:00.000Z'
 			)
 		);
+
 		expect(v2Commit.at(-1)).toBe(1);
 
 		const staleCommit = runCommands(
@@ -163,6 +172,7 @@ describe('lease-guarded semantic indexing SQL', () => {
 				'2026-07-27T00:02:00.000Z'
 			)
 		);
+
 		expect(staleCommit.at(-1)).toBe(0);
 		expect(
 			database
@@ -205,6 +215,7 @@ describe('lease-guarded semantic indexing SQL', () => {
 		seedVersion(database, fileId, 2);
 		const v2 = lease(fileId, 2, 1, 'D');
 		expect(claim(database, v2)).toEqual([1]);
+
 		const staleWhileRunning = runCommands(
 			database,
 			indexFailureCommands(
@@ -218,6 +229,7 @@ describe('lease-guarded semantic indexing SQL', () => {
 				'2026-07-27T00:01:00.000Z'
 			)
 		);
+
 		expect(staleWhileRunning.at(-1)).toBe(0);
 		expect(
 			database
@@ -242,6 +254,7 @@ describe('lease-guarded semantic indexing SQL', () => {
 				'2026-07-27T00:02:00.000Z'
 			)
 		);
+
 		const staleWhileReady = runCommands(
 			database,
 			indexFailureCommands(
@@ -255,6 +268,7 @@ describe('lease-guarded semantic indexing SQL', () => {
 				'2026-07-27T00:03:00.000Z'
 			)
 		);
+
 		expect(staleWhileReady.at(-1)).toBe(0);
 		expect(
 			database
@@ -293,12 +307,14 @@ describe('lease-guarded semantic indexing SQL', () => {
 			)
 			.run(fileId);
 		const index = chunksAndIds(attempt, 'a'.repeat(searchTextLimit));
+
 		const commit = semanticCommitCommands(
 			attempt,
 			index.chunks,
 			index.vectorIds,
 			'2026-07-27T00:01:00.000Z'
 		);
+
 		expect(index.chunks.length).toBeGreaterThan(30);
 		expect(commit).toHaveLength(5);
 		expect(runCommands(database, commit).at(-1)).toBe(1);
@@ -318,10 +334,12 @@ describe('lease-guarded semantic indexing SQL', () => {
 			vectorId: `delete-${index}`,
 			nextRunAt: '2026-07-27T00:10:00.000Z'
 		}));
+
 		const insert = database.prepare(
 			`INSERT INTO pending_vector_deletes (vector_id, queued_at)
 			VALUES (?, '2026-07-27T00:00:00.000Z')`
 		);
+
 		for (const row of pending) insert.run(row.vectorId);
 		expect(
 			runCommands(database, [

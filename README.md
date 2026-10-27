@@ -168,6 +168,13 @@ bun check
 bun run test
 ```
 
+`bun check` runs the workspace typechecks and repository checks, then `vp check`
+for Oxfmt formatting and Oxlint linting through Vite+. Run `bun format` to format,
+`bun format:check` to check formatting, or `bun lint` to lint separately. Their
+shared settings live in the root `vite.config.ts`, including the vendored
+anti-slop and Effect rules in `tools/oxlint/anti-slop/`. Their source provenance
+is recorded in `tools/oxlint/anti-slop/UPSTREAM.md`.
+
 Run `bun --filter @tdrive/web types:worker` after changing Wrangler bindings.
 The checked-in `worker-configuration.d.ts` is generated from `wrangler.jsonc`.
 The Cloudflare adapter wrapper emits a standard module Worker with both `fetch`

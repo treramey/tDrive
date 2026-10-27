@@ -45,25 +45,33 @@
 		layout: { type: 'string', default: 'grid' },
 		sort: { type: 'string', default: 'updated' }
 	});
+
 	const params = useSearchParams(searchSchema, {
 		debounce: 200,
 		pushHistory: true,
 		noScroll: true
 	});
+
 	const session = getDashboardSession();
 	const toasts = getToasts();
+
 	const showTrash = $derived(
 		browser
 			? params.view === 'trash'
 			: page.url.searchParams.get('view') === 'trash'
 	);
+
 	const layout = $derived(params.layout === 'list' ? 'list' : 'grid');
+
 	const loadingLayout = $derived(
 		page.url.searchParams.get('layout') === 'list' ? 'list' : 'grid'
 	);
+
 	const deviceCode = $derived(page.url.searchParams.get('device') ?? '');
+
 	const deviceExpiresAt = $derived.by(() => {
 		const seconds = Number(page.url.searchParams.get('expires'));
+
 		return Number.isSafeInteger(seconds) && seconds > 0
 			? seconds * 1_000
 			: undefined;
@@ -75,18 +83,21 @@
 		query: () => params.q,
 		tags: () => params.tags,
 		trashed: () => showTrash,
-		sort: () =>
-			params.sort === 'name'
-				? 'name'
-				: params.sort === 'size'
-					? 'size'
-					: 'updated',
+		sort: () => {
+			if (params.sort === 'name') return 'name';
+
+			if (params.sort === 'size') return 'size';
+
+			return 'updated';
+		},
 		initialList: untrack(() => initialList),
 		initialError: untrack(() => initialError)
 	});
+
 	const uploads = new UploadManager(() => {
 		void files.list.refetch();
 	});
+
 	let uploadOpen = $state(false);
 	let tagManagerOpen = $state(false);
 
@@ -96,15 +107,21 @@
 		files: () => files.currentFiles,
 		visible: () => files.visibleFiles,
 		view: () => showTrash,
-		refetch: () => files.list.refetch()
+		refetch: async () => {
+			await files.list.refetch();
+		}
 	});
+
 	const trash = createTrashFlows({
 		session,
 		toasts,
-		refetch: () => files.list.refetch(),
+		refetch: async () => {
+			await files.list.refetch();
+		},
 		clearSelection: selection.clear,
 		onRemove: files.removeFile
 	});
+
 	const drag = createDragUpload({
 		session,
 		toasts,
@@ -121,16 +138,21 @@
 	});
 
 	let searchInput = $state<HTMLInputElement>();
+
 	const attachSearch: Attachment<HTMLInputElement> = (node) => {
 		searchInput = node;
+
 		return () => {
 			if (searchInput === node) searchInput = undefined;
 		};
 	};
 
 	const pressed = new PressedKeys();
+
 	pressed.onKeys('/', () => searchInput?.focus());
+
 	pressed.onKeys(['Meta', 'k'], () => searchInput?.focus());
+
 	pressed.onKeys('u', () => {
 		if (
 			document.activeElement instanceof HTMLInputElement ||
@@ -138,6 +160,7 @@
 			document.activeElement instanceof HTMLSelectElement
 		)
 			return;
+
 		if (drag.available()) uploadOpen = true;
 	});
 
@@ -158,6 +181,7 @@
 				session.token,
 				files.list.current.contentOrigin
 			);
+
 			if (file.public) {
 				window.open(url, '_blank', 'noopener');
 			} else {
@@ -185,6 +209,7 @@
 		const tag = files.list.current.tags.find(
 			(candidate) => candidate.id === tagId
 		);
+
 		if (!tag) return;
 		await selection.addSelectedTag(tag);
 	};

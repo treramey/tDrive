@@ -12,12 +12,14 @@ export const PUT: RequestHandler = ({ cookies, params, request, url }) =>
 			const sites = yield* Sites;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			const path = url.searchParams.get('path');
+
 			if (path === null) {
 				return yield* new InvalidRequest({
 					status: 400,
 					message: 'Site asset path is required'
 				});
 			}
+
 			return Response.json(
 				yield* sites.stageAsset({
 					sessionId: params.id,

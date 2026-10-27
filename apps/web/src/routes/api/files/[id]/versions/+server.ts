@@ -9,22 +9,26 @@ import { Indexing } from '$lib/server/services/indexing';
 
 export const PUT: RequestHandler = async (event) => {
 	const { cookies, params, request, url } = event;
+
 	const output = await runEdgeWithEvent(
 		event,
 		Effect.gen(function* () {
 			const auth = yield* Auth;
 			const authGuard = yield* AuthGuard;
 			const files = yield* Files;
+
 			const credential = yield* authorizeWriteRequest(
 				auth,
 				request,
 				url,
 				cookies
 			);
+
 			const rateLimit = yield* authGuard.consume(
 				'upload',
 				credential.credentialId
 			);
+
 			if (!rateLimit.allowed) {
 				return {
 					fileId: null,
@@ -34,6 +38,7 @@ export const PUT: RequestHandler = async (event) => {
 					)
 				};
 			}
+
 			const result = yield* files.uploadVersion({
 				id: params.id,
 				contentType:
@@ -41,13 +46,16 @@ export const PUT: RequestHandler = async (event) => {
 				contentLength: request.headers.get('content-length'),
 				body: request.body
 			});
+
 			return {
 				fileId: params.id,
 				response: Response.json(result, { status: 201 })
 			};
 		})
 	);
+
 	const uploadedFileId = output.fileId;
+
 	if (uploadedFileId !== null && event.platform) {
 		event.platform.ctx.waitUntil(
 			runWorkerProgram(
@@ -59,5 +67,6 @@ export const PUT: RequestHandler = async (event) => {
 			)
 		);
 	}
+
 	return output.response;
 };

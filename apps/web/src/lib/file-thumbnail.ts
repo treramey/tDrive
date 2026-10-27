@@ -52,6 +52,7 @@ const TRANSFORMABLE_IMAGE_TYPES = new Set([
 
 export const supportsDashboardThumbnail = (contentType: string) => {
 	const normalized = contentType.split(';', 1)[0]?.trim().toLowerCase();
+
 	return normalized !== undefined && TRANSFORMABLE_IMAGE_TYPES.has(normalized);
 };
 
@@ -90,16 +91,20 @@ export const dashboardThumbnailUrl = (
 	version: number
 ) => {
 	const url = new URL(contentUrl);
+
 	const siteGrant = url.pathname.match(
 		/\/@grant\/\d+\/(?<expires>\d+)\/(?<signature>[A-Za-z0-9_-]{43})(?:\/|$)/
 	);
+
 	if (siteGrant?.groups) {
 		url.searchParams.set('e', siteGrant.groups.expires ?? '');
 		url.searchParams.set('g', siteGrant.groups.signature ?? '');
 	}
+
 	url.pathname = `/t/${encodeURIComponent(id)}/${version}/grid.webp`;
 	url.searchParams.delete('v');
 	url.searchParams.delete('preview');
+
 	return url.href;
 };
 
@@ -112,10 +117,12 @@ export const dashboardThumbnailSourceUrl = (
 	const url = new URL(`/f/${encodeURIComponent(id)}`, contentOrigin);
 	url.searchParams.set('v', String(version));
 	url.searchParams.set('purpose', 'thumbnail');
+
 	if (grant) {
 		url.searchParams.set('e', grant.expires);
 		url.searchParams.set('g', grant.signature);
 	}
+
 	return url;
 };
 
@@ -130,8 +137,10 @@ export const dashboardSiteThumbnailSourceUrl = (
 		`/s/${encodeURIComponent(id)}/@grant/${version}/${grant.expires}/${grant.signature}/`,
 		contentOrigin
 	);
+
 	url.searchParams.set('purpose', 'thumbnail');
 	url.searchParams.set('e', thumbnailGrant.expires);
 	url.searchParams.set('g', thumbnailGrant.signature);
+
 	return url;
 };

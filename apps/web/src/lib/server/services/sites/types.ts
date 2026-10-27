@@ -48,13 +48,7 @@ export const PendingDeleteRow = Schema.Struct({
 	r2_key: Schema.String
 });
 
-export const decodeRows = <A, I>(
-	schema: Schema.Codec<A, I, never>,
-	rows: unknown
-) => {
-	const decoded = Schema.decodeUnknownOption(Schema.Array(schema))(rows);
-	return decoded._tag === 'Some' ? decoded.value : [];
-};
+export { decodeRows } from '../../decode-rows';
 
 export interface StageAssetInput {
 	readonly sessionId: string;
@@ -83,7 +77,7 @@ export interface SiteContent {
 	readonly sizeBytes: number;
 }
 
-export interface SitesShape {
+export interface SitesService {
 	readonly createSession: (
 		input: SiteSessionCreate
 	) => Effect.Effect<SiteSession, InvalidRequest | NotFound | StorageError>;

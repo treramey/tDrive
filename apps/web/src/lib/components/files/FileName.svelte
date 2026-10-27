@@ -15,8 +15,10 @@
 	let editing = $state(false);
 	let name = $derived(file.displayName);
 	let input = $state<HTMLInputElement>();
+
 	const attachInput: Attachment<HTMLInputElement> = (node) => {
 		input = node;
+
 		return () => {
 			if (input === node) input = undefined;
 		};
@@ -25,6 +27,7 @@
 	const save = () => {
 		const next = name.trim();
 		editing = false;
+
 		if (next && next !== file.displayName) {
 			onrename(next);
 		} else {

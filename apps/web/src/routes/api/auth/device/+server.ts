@@ -14,22 +14,27 @@ export const POST: RequestHandler = ({ request, getClientAddress }) =>
 			const auth = yield* Auth;
 			const authGuard = yield* AuthGuard;
 			const config = yield* AppConfig;
+
 			const rateLimit = yield* authGuard.consume(
 				'deviceCreate',
 				getClientAddress()
 			);
+
 			if (!rateLimit.allowed) return authRateLimitResponse(rateLimit);
+
 			const input = yield* decodeJson(
 				request,
 				DeviceAuthorizationCreateSchema,
 				'A device name is required'
 			);
+
 			const result = yield* auth.createDeviceAuthorization(input.name);
 			const verificationUri = `${config.dashboardOrigin}/`;
 			const expiresAt = Math.floor(Date.now() / 1_000) + result.expiresIn;
 			const verificationUriComplete = new URL(verificationUri);
 			verificationUriComplete.searchParams.set('device', result.userCode);
 			verificationUriComplete.searchParams.set('expires', String(expiresAt));
+
 			return Response.json(
 				{
 					deviceCode: result.deviceCode,

@@ -1,4 +1,4 @@
-export const jsonResult = (value: unknown) => ({
+export const jsonResult = <A>(value: A) => ({
 	content: [{ type: 'text' as const, text: JSON.stringify(value) }]
 });
 

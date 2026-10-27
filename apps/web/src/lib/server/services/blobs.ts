@@ -9,7 +9,7 @@ export interface StoredBlob {
 	readonly etag: string;
 }
 
-export interface BlobsShape {
+export interface BlobsService {
 	readonly put: (
 		key: string,
 		body: ReadableStream<Uint8Array> | null,
@@ -44,7 +44,9 @@ export interface BlobsShape {
 	) => Effect.Effect<void, StorageError>;
 }
 
-export class Blobs extends Context.Service<Blobs, BlobsShape>()('app/Blobs') {}
+export class Blobs extends Context.Service<Blobs, BlobsService>()(
+	'app/Blobs'
+) {}
 
 const makeBlobs = Effect.gen(function* () {
 	const bucket = yield* Bucket;
@@ -67,7 +69,9 @@ const makeBlobs = Effect.gen(function* () {
 						: bucket.get(key),
 				catch: (cause) => new StorageError({ operation: 'get blob', cause })
 			});
+
 			if (object === null) return yield* new NotFound({ id: key });
+
 			return object;
 		}),
 		head: Effect.fn('Blobs.head')(function* (key) {
@@ -75,7 +79,9 @@ const makeBlobs = Effect.gen(function* () {
 				try: () => bucket.head(key),
 				catch: (cause) => new StorageError({ operation: 'head blob', cause })
 			});
+
 			if (object === null) return yield* new NotFound({ id: key });
+
 			return object;
 		}),
 		getIfChanged: Effect.fn('Blobs.getIfChanged')(function* (key, etag) {
@@ -92,7 +98,9 @@ const makeBlobs = Effect.gen(function* () {
 				catch: (cause) =>
 					new StorageError({ operation: 'get blob if changed', cause })
 			});
+
 			if (object === null) return yield* new NotFound({ id: key });
+
 			return isR2ObjectBody(object)
 				? { changed: true as const, object }
 				: { changed: false as const, object };
@@ -105,12 +113,14 @@ const makeBlobs = Effect.gen(function* () {
 					catch: (cause) =>
 						new StorageError({ operation: 'read text prefix', cause })
 				});
+
 				if (object === null) {
 					return yield* new StorageError({
 						operation: 'read text prefix',
 						cause: 'Stored object is missing'
 					});
 				}
+
 				return yield* Effect.tryPromise({
 					try: () => object.text(),
 					catch: (cause) =>
@@ -142,17 +152,22 @@ const makeBlobs = Effect.gen(function* () {
 					for (const prefix of prefixes) {
 						const keys: string[] = [];
 						let cursor: string | undefined;
+
 						do {
 							const page = await bucket.list({ prefix, cursor, limit: 1_000 });
 							keys.push(...page.objects.map((object) => object.key));
+
 							if (!page.truncated) break;
+
 							if (page.cursor === undefined) {
 								throw new Error(
 									'Truncated R2 listing did not include a cursor'
 								);
 							}
+
 							cursor = page.cursor;
 						} while (cursor !== undefined);
+
 						for (let index = 0; index < keys.length; index += 500) {
 							await bucket.delete(keys.slice(index, index + 500));
 						}

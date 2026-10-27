@@ -13,6 +13,7 @@ describe('Markdown preview rendering', () => {
 		const rendered = renderMarkdown(
 			'<script>alert(1)</script>\n\n[unsafe](javascript:alert(1))'
 		);
+
 		expect(rendered).not.toContain('<script>');
 		expect(rendered).not.toContain('href="javascript:');
 	});

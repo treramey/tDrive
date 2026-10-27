@@ -24,6 +24,7 @@ describe('MCP payload', () => {
 	it('accepts empty text as a zero-byte file', () => {
 		const decoded = decodeExclusiveContent({ text: '' });
 		expect(decoded.ok).toBe(true);
+
 		if (decoded.ok) expect(decoded.bytes.byteLength).toBe(0);
 	});
 
@@ -42,6 +43,7 @@ describe('MCP payload', () => {
 		const decoded = decodeExclusiveContent({
 			text: 'x'.repeat(MCP_MAX_UPLOAD_BYTES + 1)
 		});
+
 		expect(decoded).toEqual({
 			ok: false,
 			message: 'Content exceeds the 2 MiB MCP upload limit',

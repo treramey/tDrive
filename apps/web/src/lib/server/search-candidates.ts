@@ -29,6 +29,7 @@ export const rankedSearchCommand = (
 		index === 'files_fts'
 			? 'bm25(files_fts, 10.0, 5.0, 1.0)'
 			: 'bm25(files_trgm)';
+
 	return {
 		sql: `SELECT ${index}.file_id, ${score} AS score
 			FROM ${index}

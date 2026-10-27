@@ -1,7 +1,7 @@
-import { Context, Layer } from 'effect';
+import { Context, Layer, Schema } from 'effect';
 import { normalizeOrigins } from './host-gate';
 
-export interface AppConfigShape {
+export interface AppSettings {
 	readonly dashboardOrigin: string;
 	readonly contentOrigin: string;
 	readonly maxUploadBytes: number;
@@ -13,7 +13,7 @@ export interface AppConfigShape {
 	readonly embeddingDimensions: 384;
 }
 
-export class AppConfig extends Context.Service<AppConfig, AppConfigShape>()(
+export class AppConfig extends Context.Service<AppConfig, AppSettings>()(
 	'app/AppConfig'
 ) {}
 
@@ -33,33 +33,46 @@ export const configFromEnv = (env: Env) => {
 		dashboardOrigin: env.DASHBOARD_ORIGIN,
 		contentOrigin: env.CONTENT_ORIGIN
 	});
+
 	const maxUploadBytes = Number(env.MAX_UPLOAD_BYTES);
+
 	if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes <= 0) {
 		throw new Error('MAX_UPLOAD_BYTES must be a positive safe integer');
 	}
+
 	// Global cap on stored bytes across all live file versions. Defaults to
 	// 100 GiB when unset so a leaked credential cannot fill the bucket.
-	const rawMaxTotalBytes = env.MAX_TOTAL_BYTES as string | undefined;
+	const rawMaxTotalBytes = Schema.decodeUnknownSync(
+		Schema.UndefinedOr(Schema.String)
+	)(env.MAX_TOTAL_BYTES);
+
 	const maxTotalBytes =
 		rawMaxTotalBytes === undefined || rawMaxTotalBytes === ''
 			? 100 * 1024 ** 3
 			: Number(rawMaxTotalBytes);
+
 	if (!Number.isSafeInteger(maxTotalBytes) || maxTotalBytes <= 0) {
 		throw new Error('MAX_TOTAL_BYTES must be a positive safe integer');
 	}
-	if (typeof env.PASSCODE !== 'string' || env.PASSCODE.length < 12) {
+
+	if (!Schema.is(Schema.String)(env.PASSCODE) || env.PASSCODE.length < 12) {
 		throw new Error('PASSCODE must contain at least 12 characters');
 	}
+
 	const semanticSearch = semanticMode(String(env.SEMANTIC_SEARCH));
+
 	if (env.EMBEDDING_MODEL !== '@cf/baai/bge-small-en-v1.5') {
 		throw new Error('EMBEDDING_MODEL must stay pinned to bge-small-en-v1.5');
 	}
+
 	if (env.EMBEDDING_POOLING !== 'cls') {
 		throw new Error('EMBEDDING_POOLING must stay pinned to cls');
 	}
+
 	if (env.EMBEDDING_DIMENSIONS !== '384') {
 		throw new Error('EMBEDDING_DIMENSIONS must stay pinned to 384');
 	}
+
 	return {
 		...origins,
 		maxUploadBytes,
@@ -69,7 +82,7 @@ export const configFromEnv = (env: Env) => {
 		embeddingModel: '@cf/baai/bge-small-en-v1.5',
 		embeddingPooling: 'cls',
 		embeddingDimensions: 384
-	} satisfies AppConfigShape;
+	} satisfies AppSettings;
 };
 
 export const ConfigLive = (env: Env) =>

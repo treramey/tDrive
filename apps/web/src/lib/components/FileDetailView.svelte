@@ -26,6 +26,7 @@
 		initialDetail?: FileDetailResponse | null;
 		initialError?: string;
 	} = $props();
+
 	const session = getDashboardSession();
 	const toasts = getToasts();
 	const id = $derived(page.params.id);
@@ -33,10 +34,12 @@
 	const backHref = $derived(from.startsWith('?') ? `/${from}` : '/');
 	const ssrDetail = $derived(initialDetail);
 	let hydratedFileId: string | null = null;
+
 	const detail = resource(
 		() => [session.ready, session.token, id] as const,
 		([ready, token, fileId], _previous, { signal }) => {
 			if (!ready || !token || !fileId) return Promise.resolve(null);
+
 			// The detail page was already rendered server-side for this exact
 			// file; skip the duplicate fetch on hydration. Track that per file
 			// so a client navigation to another file can consume its SSR
@@ -47,12 +50,15 @@
 				hydratedFileId !== fileId
 			) {
 				hydratedFileId = fileId;
+
 				return Promise.resolve(ssrDetail);
 			}
+
 			return getFile(token, fileId, signal);
 		},
 		{ initialValue: untrack(() => initialDetail) }
 	);
+
 	let busy = $state(false);
 	let operation = 0;
 	let serverLoadError = $state(untrack(() => initialError));
@@ -63,14 +69,17 @@
 		const token = session.token;
 		const current = detail.current;
 		const cursor = current?.nextVersionsCursor;
+
 		if (!token || !current || !cursor || loadingOlderVersions) return;
 		// Participates in the same operation counter as mutations: if a
 		// rename/restore/tag change lands while this request is in flight,
 		// the stale merge is dropped instead of clobbering it.
 		const currentOperation = operation;
 		loadingOlderVersions = true;
+
 		try {
 			const next = await getFile(token, current.file.id, undefined, cursor);
+
 			if (
 				session.token !== token ||
 				operation !== currentOperation ||
@@ -79,6 +88,7 @@
 			) {
 				return;
 			}
+
 			const seen = new Set(current.versions.map((v) => v.version));
 			detail.mutate({
 				...detail.current,
@@ -96,7 +106,7 @@
 	};
 
 	$effect(() => {
-		id;
+		void id;
 		operation += 1;
 		busy = false;
 		serverLoadError = initialError;
@@ -108,21 +118,27 @@
 
 	const update = async (mutation: FileMutation, success: string) => {
 		const current = detail.current;
+
 		if (!current || busy) return false;
 		const fileId = current.file.id;
 		const currentOperation = ++operation;
 		busy = true;
+
 		try {
 			const result = await mutateFile(session.token, fileId, mutation);
+
 			if (
 				operation !== currentOperation ||
 				detail.current?.file.id !== fileId
 			) {
 				return false;
 			}
+
 			detail.mutate({ ...detail.current, file: result.file });
+
 			if (mutation.action === 'restore-version') {
 				await detail.refetch();
+
 				if (
 					operation !== currentOperation ||
 					detail.current?.file.id !== fileId
@@ -130,7 +146,9 @@
 					return false;
 				}
 			}
+
 			toasts.success(result.forcedPublic ? 'HTML files stay public' : success);
+
 			return true;
 		} catch (cause) {
 			if (
@@ -139,6 +157,7 @@
 			) {
 				toasts.error(cause, 'Could not update the file');
 			}
+
 			return false;
 		} finally {
 			if (operation === currentOperation) busy = false;
@@ -147,22 +166,29 @@
 
 	const fileUrl = (version?: number) => {
 		const current = detail.current;
+
 		if (!current) return '';
+
 		if (current.file.kind === 'site')
 			return `${current.contentOrigin}/s/${current.file.id}/`;
+
 		return `${current.contentOrigin}/f/${current.file.id}${version ? `?v=${version}` : ''}`;
 	};
 
 	const linkFor = async (version?: number) => {
 		const current = detail.current;
+
 		if (!current) return { url: '', expiresAt: null };
 		const fileId = current.file.id;
+
 		const expirationTime = current.file.expiresAt
 			? new Date(current.file.expiresAt).getTime()
 			: Number.NaN;
+
 		const unavailable =
 			current.file.deletedAt !== null ||
 			(Number.isFinite(expirationTime) && expirationTime <= Date.now());
+
 		const link =
 			current.file.public && !unavailable
 				? { url: fileUrl(version), expiresAt: null }
@@ -173,10 +199,13 @@
 						undefined,
 						unavailable
 					);
+
 		const resolved = await link;
+
 		if (detail.current?.file.id !== fileId) {
 			throw new Error('The selected file changed before the link was ready');
 		}
+
 		return resolved;
 	};
 
@@ -185,10 +214,13 @@
 	const openLink = async (version?: number) => {
 		try {
 			const current = detail.current;
+
 			if (!current) return;
 			const fileId = current.file.id;
 			const link = await linkFor(version);
+
 			if (detail.current?.file.id !== fileId) return;
+
 			if (current.file.public) {
 				window.open(link.url, '_blank', 'noopener');
 			} else {
@@ -206,21 +238,26 @@
 
 	const toggleTag = async (tag: Tag) => {
 		const current = detail.current;
+
 		if (!current || busy) return;
 		const fileId = current.file.id;
 		const currentOperation = ++operation;
 		busy = true;
+
 		try {
 			const selected = current.file.tags.some((item) => item.id === tag.id)
 				? current.file.tags.filter((item) => item.id !== tag.id)
 				: [...current.file.tags, tag];
+
 			const file = await setFileTags(session.token, current.file.id, selected);
+
 			if (
 				operation !== currentOperation ||
 				detail.current?.file.id !== fileId
 			) {
 				return;
 			}
+
 			detail.mutate({ ...current, file });
 		} catch (cause) {
 			if (
@@ -236,22 +273,28 @@
 
 	const addTag = async (name: string) => {
 		const current = detail.current;
+
 		if (!current || busy) return;
 		const fileId = current.file.id;
 		const currentOperation = ++operation;
 		busy = true;
+
 		try {
 			const tag = await createTag(session.token, { name });
+
 			const selected = current.file.tags.some((item) => item.id === tag.id)
 				? current.file.tags
 				: [...current.file.tags, tag];
+
 			const file = await setFileTags(session.token, current.file.id, selected);
+
 			if (
 				operation !== currentOperation ||
 				detail.current?.file.id !== fileId
 			) {
 				return;
 			}
+
 			detail.mutate({
 				...current,
 				file,
@@ -266,6 +309,7 @@
 			) {
 				toasts.error(cause, 'Could not create the tag');
 			}
+
 			throw cause;
 		} finally {
 			if (operation === currentOperation) busy = false;
@@ -274,25 +318,33 @@
 
 	const putVersion = async (file: File) => {
 		const current = detail.current;
+
 		if (!current || busy) return;
 		const fileId = current.file.id;
 		const currentOperation = ++operation;
+
 		if (file.size > current.maxUploadBytes) {
 			toasts.error(
 				new Error('The selected file is larger than the upload limit')
 			);
+
 			return;
 		}
+
 		busy = true;
+
 		try {
 			await uploadVersion(session.token, current.file.id, file);
+
 			if (
 				operation !== currentOperation ||
 				detail.current?.file.id !== fileId
 			) {
 				return;
 			}
+
 			await detail.refetch();
+
 			if (
 				operation === currentOperation &&
 				detail.current?.file.id === fileId

@@ -6,6 +6,7 @@ import type { Toasts } from './toast.svelte';
 type ToastSink = Pick<Toasts, 'success' | 'error'>;
 
 type SelectionDeps = {
+	readonly api?: Pick<typeof import('./api'), 'mutateFile' | 'setFileTags'>;
 	readonly session: {
 		readonly token: string;
 	};
@@ -13,7 +14,7 @@ type SelectionDeps = {
 	readonly files: () => ReadonlyArray<DashboardFile>;
 	readonly visible: () => ReadonlyArray<DashboardFile>;
 	readonly view: () => boolean;
-	readonly refetch: () => Promise<unknown>;
+	readonly refetch: () => Promise<void>;
 };
 
 export const createSelection = ({
@@ -22,7 +23,8 @@ export const createSelection = ({
 	files,
 	visible,
 	view,
-	refetch
+	refetch,
+	api = { mutateFile, setFileTags }
 }: SelectionDeps) => {
 	let selectedIds = $state<ReadonlyArray<string>>([]);
 	let lastSelectionIndex = -1;
@@ -32,6 +34,7 @@ export const createSelection = ({
 
 	$effect(() => {
 		const nextView = view();
+
 		if (selectionView !== nextView) {
 			selectionView = nextView;
 			selectedIds = [];
@@ -42,6 +45,7 @@ export const createSelection = ({
 	$effect(() => {
 		const available = new Set(files().map((file) => file.id));
 		const next = selectedIds.filter((id) => available.has(id));
+
 		if (next.length !== selectedIds.length) selectedIds = next;
 	});
 
@@ -55,7 +59,9 @@ export const createSelection = ({
 		shift: boolean
 	) => {
 		const index = visible().findIndex((candidate) => candidate.id === file.id);
+
 		if (index < 0) return;
+
 		const ids =
 			shift && lastSelectionIndex >= 0
 				? visible()
@@ -65,11 +71,14 @@ export const createSelection = ({
 						)
 						.map((candidate) => candidate.id)
 				: [file.id];
+
 		const next = new Set(selectedIds);
+
 		for (const id of ids) {
 			if (selected) next.add(id);
 			else next.delete(id);
 		}
+
 		selectedIds = [...next];
 		lastSelectionIndex = index;
 	};
@@ -86,22 +95,28 @@ export const createSelection = ({
 		selectedIds = [];
 	};
 
-	const runBatch = async (
+	const runBatch = async <A>(
 		label: string,
-		operation: (file: DashboardFile) => Promise<unknown>
+		operation: (file: DashboardFile) => Promise<A>
 	) => {
 		const targets = selectedFiles;
+
 		if (batchBusy || targets.length === 0) return;
 		const token = session.token;
 		batchBusy = true;
+
 		try {
 			const outcomes = await Promise.allSettled(targets.map(operation));
 			await refetch();
+
 			if (session.token !== token) return;
+
 			const failedIds = targets
 				.filter((_, index) => outcomes[index]?.status === 'rejected')
 				.map((file) => file.id);
+
 			selectedIds = failedIds;
+
 			if (failedIds.length > 0) {
 				toasts.error(
 					new Error(
@@ -119,11 +134,11 @@ export const createSelection = ({
 	};
 
 	const mutateSelected = (label: string, mutation: FileMutation) =>
-		runBatch(label, (file) => mutateFile(session.token, file.id, mutation));
+		runBatch(label, (file) => api.mutateFile(session.token, file.id, mutation));
 
 	const addSelectedTag = async (tag: Tag) => {
 		await runBatch('Tagged', (file) =>
-			setFileTags(
+			api.setFileTags(
 				session.token,
 				file.id,
 				file.tags.some((current) => current.id === tag.id)

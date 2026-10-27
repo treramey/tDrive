@@ -1,3 +1,4 @@
+import { decodeRows } from '../decode-rows';
 import {
 	API_KEY_PATTERN,
 	type ApiKey,
@@ -104,6 +105,7 @@ export interface AuthorizedCredential {
 }
 
 type PasskeyFailure = InvalidRequest | Unauthorized | StorageError;
+
 type PasskeyStart =
 	| { readonly kind: 'login' }
 	| {
@@ -112,6 +114,7 @@ type PasskeyStart =
 			readonly passcode: string;
 			readonly name: string;
 	  };
+
 type PasskeyPrompt = {
 	readonly ceremonyId: typeof CeremonyIdSchema.Type;
 	readonly bindingSecret: string;
@@ -125,9 +128,10 @@ type PasskeyPrompt = {
 			readonly options: PublicKeyCredentialCreationOptionsJSON;
 	  }
 );
+
 type PasskeyBinding = { readonly binding: string };
 
-export interface AuthShape {
+export interface AuthService {
 	readonly startPasskey: (
 		input: PasskeyStart
 	) => Effect.Effect<PasskeyPrompt, PasskeyFailure>;
@@ -199,7 +203,7 @@ export interface AuthShape {
 	>;
 }
 
-export class Auth extends Context.Service<Auth, AuthShape>()('app/Auth') {}
+export class Auth extends Context.Service<Auth, AuthService>()('app/Auth') {}
 
 const parseUserCode = (value: string) =>
 	Effect.try({
@@ -214,7 +218,7 @@ const parseUserCode = (value: string) =>
 	});
 
 export const authorizeRequest = (
-	auth: AuthShape,
+	auth: AuthService,
 	request: Request,
 	url: URL,
 	cookies: Cookies
@@ -230,7 +234,7 @@ export const authorizeRequest = (
 // For routes that create, change, or delete data. Read-only API keys are
 // authenticated but rejected here with a 403 rather than a 401.
 export const authorizeWriteRequest = (
-	auth: AuthShape,
+	auth: AuthService,
 	request: Request,
 	url: URL,
 	cookies: Cookies
@@ -251,6 +255,7 @@ export const authorizeWriteRequest = (
 const randomToken = (bytes = 32) => {
 	const value = new Uint8Array(bytes);
 	crypto.getRandomValues(value);
+
 	return btoa(String.fromCharCode(...value))
 		.replaceAll('+', '-')
 		.replaceAll('/', '_')
@@ -260,6 +265,7 @@ const randomToken = (bytes = 32) => {
 const randomHex = (bytes: number) => {
 	const value = new Uint8Array(bytes);
 	crypto.getRandomValues(value);
+
 	return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join(
 		''
 	);
@@ -269,10 +275,12 @@ const randomUserCode = () => {
 	const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 	const bytes = new Uint8Array(8);
 	crypto.getRandomValues(bytes);
+
 	const value = Array.from(
 		bytes,
 		(byte) => alphabet[byte % alphabet.length]
 	).join('');
+
 	return `${value.slice(0, 4)}-${value.slice(4)}`;
 };
 
@@ -283,6 +291,7 @@ const toHex = (bytes: ArrayBuffer) =>
 
 const hexBytes = (value: string) => {
 	const normalized = /^[0-9a-f]{64}$/i.test(value) ? value : '0'.repeat(64);
+
 	return Uint8Array.from({ length: 32 }, (_, index) =>
 		Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16)
 	);
@@ -290,9 +299,11 @@ const hexBytes = (value: string) => {
 
 const constantTimeEqual = (left: Uint8Array, right: Uint8Array) => {
 	let difference = left.length ^ right.length;
+
 	for (let index = 0; index < left.length; index += 1) {
 		difference |= left[index]! ^ (right[index] ?? 0);
 	}
+
 	return difference === 0;
 };
 
@@ -300,11 +311,6 @@ const hashToken = (token: string) =>
 	Effect.promise(() =>
 		crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
 	).pipe(Effect.map(toHex));
-
-const decodeRows = <A, I>(schema: Schema.Codec<A, I, never>, rows: unknown) => {
-	const decoded = Schema.decodeUnknownOption(Schema.Array(schema))(rows);
-	return decoded._tag === 'Some' ? decoded.value : [];
-};
 
 const toApiKey = (row: typeof ApiKeyRow.Type): ApiKey => ({
 	id: row.id,
@@ -327,6 +333,7 @@ const ChallengeBase = {
 	expires_at: Schema.Int,
 	consumed_by: Schema.NullOr(Schema.String)
 };
+
 const ChallengeRow = Schema.Union([
 	Schema.Struct({
 		...ChallengeBase,
@@ -341,6 +348,7 @@ const ChallengeRow = Schema.Union([
 		name: Schema.String
 	})
 ]);
+
 const PasskeyRow = Schema.Struct({
 	id: Schema.String,
 	public_key: Schema.String,
@@ -352,19 +360,23 @@ const PasskeyRow = Schema.Struct({
 	created_at: Schema.String,
 	last_used_at: Schema.NullOr(Schema.String)
 });
+
 const CredentialState = Schema.Struct({
 	auth_epoch: Schema.Int,
 	passcode_hash: Schema.String
 });
+
 const BrowserSessionRow = Schema.Struct({
 	token_hash: Schema.String,
 	passkey_id: Schema.NullOr(Schema.String)
 });
+
 const invalidPasskey = () =>
 	new Unauthorized({
 		message:
 			'Passkey request is invalid or expired. Try again or use the passcode.'
 	});
+
 const stalePasskey = () =>
 	new InvalidRequest({
 		status: 409,
@@ -381,26 +393,32 @@ const makeAuth = Effect.gen(function* () {
 			try: run,
 			catch: (cause) => new StorageError({ operation, cause })
 		});
+
 	const query = <A, I>(
 		schema: Schema.Codec<A, I, never>,
 		statement: D1PreparedStatement
 	) =>
 		storage('read passkey state', async () => {
 			const result = await statement.all();
+
 			return Schema.decodeUnknownSync(Schema.Array(schema))(result.results);
 		});
+
 	const assertPasscode = (passcode: string) =>
 		Effect.gen(function* () {
 			const expected = yield* hashToken(config.passcode);
 			const actual = yield* hashToken(passcode);
+
 			if (!constantTimeEqual(hexBytes(expected), hexBytes(actual))) {
 				return yield* new Unauthorized({ message: 'Passcode is incorrect' });
 			}
 		});
+
 	const sessionMaterial = Effect.gen(function* () {
 		const token = randomToken();
 		const hash = yield* hashToken(token);
 		const now = new Date();
+
 		return {
 			token,
 			hash,
@@ -410,6 +428,7 @@ const makeAuth = Effect.gen(function* () {
 			).toISOString()
 		};
 	});
+
 	const sessionInsert = (
 		material: Effect.Success<typeof sessionMaterial>,
 		source: {
@@ -435,6 +454,7 @@ const makeAuth = Effect.gen(function* () {
 				source?.ceremonyId ?? null,
 				source?.marker ?? null
 			);
+
 	const currentState = Effect.gen(function* () {
 		const hash = yield* hashToken(config.passcode);
 		yield* storage('initialize credential state', () =>
@@ -446,19 +466,25 @@ const makeAuth = Effect.gen(function* () {
 				.bind(hash, new Date().toISOString())
 				.run()
 		);
+
 		const rows = yield* query(
 			CredentialState,
 			db.prepare(
 				'SELECT auth_epoch, passcode_hash FROM credential_state WHERE id = 1'
 			)
 		);
+
 		const state = rows[0];
+
 		if (!state || state.passcode_hash !== hash) return yield* stalePasskey();
+
 		return { epoch: state.auth_epoch, hash };
 	});
+
 	const browserSession = (token: string) =>
 		Effect.gen(function* () {
 			const hash = yield* hashToken(token);
+
 			const rows = yield* query(
 				BrowserSessionRow,
 				db
@@ -468,13 +494,17 @@ const makeAuth = Effect.gen(function* () {
 					)
 					.bind(hash)
 			);
+
 			const row = rows[0];
+
 			if (!row)
 				return yield* new Unauthorized({
 					message: 'Sign in with the passcode to manage passkeys'
 				});
+
 			return row;
 		});
+
 	const ownerHandle = Effect.gen(function* () {
 		yield* storage('initialize passkey owner', () =>
 			db
@@ -484,18 +514,23 @@ const makeAuth = Effect.gen(function* () {
 				.bind(randomToken())
 				.run()
 		);
+
 		const rows = yield* query(
 			Schema.Struct({ user_handle: Schema.String }),
 			db.prepare('SELECT user_handle FROM auth_owner WHERE id = 1')
 		);
+
 		const row = rows[0];
+
 		if (!row)
 			return yield* new StorageError({
 				operation: 'read passkey owner',
 				cause: 'Owner is missing'
 			});
+
 		return row.user_handle;
 	});
+
 	const loadChallenge = (
 		input: {
 			readonly ceremonyId: typeof CeremonyIdSchema.Type;
@@ -507,15 +542,19 @@ const makeAuth = Effect.gen(function* () {
 			const site = yield* validate(() =>
 				passkeyRelyingParty(config.dashboardOrigin)
 			);
+
 			const state = yield* currentState;
 			const bindingHash = yield* hashToken(input.binding);
+
 			const rows = yield* query(
 				ChallengeRow,
 				db
 					.prepare('SELECT * FROM passkey_challenges WHERE id = ?')
 					.bind(input.ceremonyId)
 			);
+
 			const row = rows[0];
+
 			if (
 				!row ||
 				row.purpose !== purpose ||
@@ -528,20 +567,25 @@ const makeAuth = Effect.gen(function* () {
 			) {
 				return yield* invalidPasskey();
 			}
+
 			return { row, state, site, bindingHash };
 		});
+
 	const checkClientData = (encoded: string) =>
 		Effect.gen(function* () {
-			const json = yield* Effect.try({
-				try: (): unknown =>
-					JSON.parse(new TextDecoder().decode(unbase64url(encoded))),
-				catch: invalidPasskey
-			});
+			const json = yield* Schema.decodeUnknownEffect(
+				Schema.UnknownFromJsonString
+			)(new TextDecoder().decode(unbase64url(encoded))).pipe(
+				Effect.mapError(invalidPasskey)
+			);
+
 			const data = yield* Schema.decodeUnknownEffect(ClientDataSchema)(
 				json
 			).pipe(Effect.mapError(invalidPasskey));
+
 			if (data.crossOrigin === true) return yield* invalidPasskey();
 		});
+
 	const claimChallenge = (input: {
 		readonly row: typeof ChallengeRow.Type;
 		readonly hash: string;
@@ -576,6 +620,7 @@ const makeAuth = Effect.gen(function* () {
 				input.row.session_hash,
 				PASSKEY_LIMIT
 			);
+
 	const requireCommitted = (results: D1Result[]) =>
 		Effect.gen(function* () {
 			if (results.some((result) => result.meta.changes !== 1))
@@ -589,6 +634,7 @@ const makeAuth = Effect.gen(function* () {
 		const secretHash = yield* hashToken(token);
 		const id = crypto.randomUUID();
 		const createdAt = new Date().toISOString();
+
 		return {
 			token,
 			secretHash,
@@ -607,7 +653,7 @@ const makeAuth = Effect.gen(function* () {
 		FROM api_keys
 		ORDER BY created_at DESC, id
 	`.pipe(
-		Effect.map((rows) => decodeRows(ApiKeyRow, rows).map(toApiKey)),
+		Effect.map((rows) => decodeRows(ApiKeyRow)(rows).map(toApiKey)),
 		Effect.mapError(
 			(cause) => new StorageError({ operation: 'list API keys', cause })
 		),
@@ -629,13 +675,16 @@ const makeAuth = Effect.gen(function* () {
 			}
 
 			const bearer = bearerToken(authorization);
+
 			if (bearer) {
 				const match = API_KEY_PATTERN.exec(bearer);
+
 				if (!match) {
 					return yield* new Unauthorized({
 						message: 'A valid credential is required'
 					});
 				}
+
 				const rows = yield* sql`
 					SELECT id, name, prefix, scope, secret_hash, created_at, expires_at,
 						last_used_at, revoked_at
@@ -647,8 +696,10 @@ const makeAuth = Effect.gen(function* () {
 						(cause) => new StorageError({ operation: 'look up API key', cause })
 					)
 				);
-				const row = decodeRows(ApiKeyRow, rows)[0];
+
+				const row = decodeRows(ApiKeyRow)(rows)[0];
 				const actualHash = yield* hashToken(bearer);
+
 				if (
 					!row ||
 					!constantTimeEqual(hexBytes(actualHash), hexBytes(row.secret_hash))
@@ -657,13 +708,16 @@ const makeAuth = Effect.gen(function* () {
 						message: 'A valid credential is required'
 					});
 				}
+
 				const now = new Date();
 				const nowIso = now.toISOString();
+
 				if (row.expires_at !== null && row.expires_at <= nowIso) {
 					return yield* new Unauthorized({
 						message: 'This API key has expired'
 					});
 				}
+
 				if (shouldTouchLastUsed(row.last_used_at, now)) {
 					yield* sql`
 						UPDATE api_keys
@@ -676,6 +730,7 @@ const makeAuth = Effect.gen(function* () {
 						)
 					);
 				}
+
 				return {
 					credentialId: row.id,
 					kind: 'api-key' as const,
@@ -688,14 +743,17 @@ const makeAuth = Effect.gen(function* () {
 					message: 'A valid credential is required'
 				});
 			}
+
 			if (!allowsCredentialOrigin(method, origin, config.dashboardOrigin)) {
 				return yield* new Unauthorized({
 					message: 'The request origin is not allowed'
 				});
 			}
+
 			const tokenHash = yield* hashToken(sessionToken);
 			const now = new Date();
 			const nowIso = now.toISOString();
+
 			const rows = yield* sql`
 				SELECT token_hash, expires_at, last_used_at
 				FROM dashboard_sessions
@@ -707,12 +765,15 @@ const makeAuth = Effect.gen(function* () {
 						new StorageError({ operation: 'look up dashboard session', cause })
 				)
 			);
-			const row = decodeRows(SessionRow, rows)[0];
+
+			const row = decodeRows(SessionRow)(rows)[0];
+
 			if (!row) {
 				return yield* new Unauthorized({
 					message: 'A valid credential is required'
 				});
 			}
+
 			if (shouldTouchLastUsed(row.last_used_at, now)) {
 				yield* sql`
 					UPDATE dashboard_sessions SET last_used_at = ${nowIso}
@@ -727,6 +788,7 @@ const makeAuth = Effect.gen(function* () {
 					)
 				);
 			}
+
 			return {
 				credentialId: row.token_hash,
 				kind: 'session' as const,
@@ -737,31 +799,39 @@ const makeAuth = Effect.gen(function* () {
 			const site = yield* validate(() =>
 				passkeyRelyingParty(config.dashboardOrigin)
 			);
+
 			let sessionHash: string | null = null;
 			let name: string | null = null;
+
 			if (input.kind === 'enroll') {
 				sessionHash = (yield* browserSession(input.sessionToken)).token_hash;
 				yield* assertPasscode(input.passcode);
 				name = yield* validate(() => normalizeApiKeyName(input.name));
 			}
+
 			const state = yield* currentState;
 			const handle = yield* ownerHandle;
+
 			const ceremonyId = yield* Schema.decodeUnknownEffect(CeremonyIdSchema)(
 				randomHex(16)
 			).pipe(Effect.orDie);
+
 			const bindingSecret = randomToken();
 			const bindingHash = yield* hashToken(bindingSecret);
 			const challenge = randomToken();
+
 			const rows = yield* query(
 				Schema.Struct({ id: Schema.String }),
 				db.prepare('SELECT id FROM passkeys')
 			);
+
 			if (input.kind === 'enroll' && rows.length >= PASSKEY_LIMIT)
 				return yield* new InvalidRequest({
 					status: 409,
 					message:
 						'Remove a passkey before adding another. You can save up to 8.'
 				});
+
 			const result = yield* storage('start passkey attempt', () =>
 				db
 					.prepare(
@@ -789,7 +859,9 @@ const makeAuth = Effect.gen(function* () {
 					)
 					.run()
 			);
+
 			yield* requireCommitted([result]);
+
 			if (input.kind === 'login') {
 				const options = yield* Effect.promise(() =>
 					generateAuthenticationOptions({
@@ -800,8 +872,10 @@ const makeAuth = Effect.gen(function* () {
 						allowCredentials: []
 					})
 				);
+
 				return { kind: 'login' as const, ceremonyId, bindingSecret, options };
 			}
+
 			const options = yield* Effect.promise(() =>
 				generateRegistrationOptions({
 					rpID: site.id,
@@ -820,6 +894,7 @@ const makeAuth = Effect.gen(function* () {
 					excludeCredentials: [...rows]
 				})
 			);
+
 			return { kind: 'enroll' as const, ceremonyId, bindingSecret, options };
 		}),
 		enrollPasskey: Effect.fn('Auth.enrollPasskey')(function* (input) {
@@ -827,10 +902,13 @@ const makeAuth = Effect.gen(function* () {
 				input,
 				'enroll'
 			);
+
 			const session = yield* browserSession(input.sessionToken);
+
 			if (row.purpose !== 'enroll' || row.session_hash !== session.token_hash)
 				return yield* invalidPasskey();
 			yield* checkClientData(input.credential.response.clientDataJSON);
+
 			const result = yield* Effect.tryPromise({
 				try: () =>
 					verifyRegistrationResponse({
@@ -844,9 +922,11 @@ const makeAuth = Effect.gen(function* () {
 					}),
 				catch: invalidPasskey
 			});
+
 			if (!result.verified) return yield* invalidPasskey();
 			const info = result.registrationInfo;
 			const marker = randomToken();
+
 			const results = yield* storage('enroll passkey', () =>
 				db.batch([
 					claimChallenge({
@@ -875,6 +955,7 @@ const makeAuth = Effect.gen(function* () {
 						)
 				])
 			);
+
 			yield* requireCommitted(results);
 		}),
 		loginWithPasskey: Effect.fn('Auth.loginWithPasskey')(function* (input) {
@@ -882,18 +963,24 @@ const makeAuth = Effect.gen(function* () {
 				input,
 				'login'
 			);
+
 			const handle = yield* ownerHandle;
+
 			if (input.credential.response.userHandle !== handle)
 				return yield* invalidPasskey();
+
 			const rows = yield* query(
 				PasskeyRow,
 				db
 					.prepare('SELECT * FROM passkeys WHERE id = ?')
 					.bind(input.credential.id)
 			);
+
 			const credential = rows[0];
+
 			if (!credential) return yield* invalidPasskey();
 			yield* checkClientData(input.credential.response.clientDataJSON);
+
 			const result = yield* Effect.tryPromise({
 				try: () =>
 					verifyAuthenticationResponse({
@@ -910,10 +997,12 @@ const makeAuth = Effect.gen(function* () {
 					}),
 				catch: invalidPasskey
 			});
+
 			if (!result.verified) return yield* invalidPasskey();
 			const material = yield* sessionMaterial;
 			const marker = randomToken();
 			const info = result.authenticationInfo;
+
 			const results = yield* storage('sign in with passkey', () =>
 				db.batch([
 					claimChallenge({
@@ -945,16 +1034,20 @@ const makeAuth = Effect.gen(function* () {
 						)
 				])
 			);
+
 			yield* requireCommitted(results);
+
 			return material.token;
 		}),
 		listPasskeys: Effect.fn('Auth.listPasskeys')(function* (sessionToken) {
 			yield* currentState;
 			const session = yield* browserSession(sessionToken);
+
 			const rows = yield* query(
 				PasskeyRow,
 				db.prepare('SELECT * FROM passkeys ORDER BY created_at, id')
 			);
+
 			return rows.map((row) => ({
 				id: row.id,
 				name: row.name,
@@ -969,6 +1062,7 @@ const makeAuth = Effect.gen(function* () {
 			yield* assertPasscode(input.passcode);
 			const state = yield* currentState;
 			const hash = yield* hashToken(input.sessionToken);
+
 			const results = yield* storage('remove passkey', () =>
 				db.batch([
 					db
@@ -985,6 +1079,7 @@ const makeAuth = Effect.gen(function* () {
 						.bind(input.id, hash, state.epoch, state.hash)
 				])
 			);
+
 			const rows = yield* Schema.decodeUnknownEffect(
 				Schema.Array(
 					Schema.Struct({ passkey_id: Schema.NullOr(Schema.String) })
@@ -995,11 +1090,14 @@ const makeAuth = Effect.gen(function* () {
 						new StorageError({ operation: 'read passkey removal', cause })
 				)
 			);
+
 			const session = rows[0];
+
 			if (!session)
 				return yield* new Unauthorized({
 					message: 'A live browser session is required'
 				});
+
 			return { signedOut: session.passkey_id === input.id };
 		}),
 		createSession: Effect.fn('Auth.createSession')(function* (passcode) {
@@ -1008,6 +1106,7 @@ const makeAuth = Effect.gen(function* () {
 			yield* storage('create dashboard session', () =>
 				sessionInsert(material, null).run()
 			);
+
 			return material.token;
 		}),
 		revokeSession: Effect.fn('Auth.revokeSession')(function* (sessionToken) {
@@ -1029,6 +1128,7 @@ const makeAuth = Effect.gen(function* () {
 		listApiKeys,
 		createApiKey: Effect.fn('Auth.createApiKey')(function* (name, options) {
 			const scope = options?.scope ?? 'read-write';
+
 			const expiresAt = yield* Effect.try({
 				try: () => validateExpiration(options?.expiresAt ?? null),
 				catch: (cause) =>
@@ -1039,6 +1139,7 @@ const makeAuth = Effect.gen(function* () {
 								message: 'Key expiration is invalid'
 							})
 			});
+
 			const generated = yield* makeApiKey(name);
 			yield* sql`
 				INSERT INTO api_keys (
@@ -1053,6 +1154,7 @@ const makeAuth = Effect.gen(function* () {
 					(cause) => new StorageError({ operation: 'create API key', cause })
 				)
 			);
+
 			return {
 				key: {
 					...generated.row,
@@ -1078,6 +1180,7 @@ const makeAuth = Effect.gen(function* () {
 				catch: (cause) =>
 					new StorageError({ operation: 'revoke API key', cause })
 			});
+
 			if (result.meta.changes !== 1) {
 				return yield* new InvalidRequest({
 					status: 404,
@@ -1091,10 +1194,13 @@ const makeAuth = Effect.gen(function* () {
 				const deviceCode = randomToken(32);
 				const deviceCodeHash = yield* hashToken(deviceCode);
 				const createdAt = new Date();
+
 				const expiresAt = new Date(
 					createdAt.getTime() + DEVICE_CODE_TTL_SECONDS * 1000
 				);
+
 				let userCode = randomUserCode();
+
 				for (let attempt = 0; attempt < 5; attempt += 1) {
 					const result = yield* Effect.tryPromise({
 						try: () =>
@@ -1121,6 +1227,7 @@ const makeAuth = Effect.gen(function* () {
 								cause
 							})
 					});
+
 					if (result.meta.changes === 1) {
 						return {
 							deviceCode,
@@ -1129,8 +1236,10 @@ const makeAuth = Effect.gen(function* () {
 							interval: DEVICE_POLL_INTERVAL_SECONDS
 						};
 					}
+
 					userCode = randomUserCode();
 				}
+
 				return yield* new StorageError({
 					operation: 'create device authorization',
 					cause: 'Could not allocate a unique approval code'
@@ -1140,6 +1249,7 @@ const makeAuth = Effect.gen(function* () {
 		approveDevice: Effect.fn('Auth.approveDevice')(function* (userCode) {
 			const code = yield* parseUserCode(userCode);
 			const now = new Date().toISOString();
+
 			const result = yield* Effect.tryPromise({
 				try: () =>
 					db
@@ -1153,6 +1263,7 @@ const makeAuth = Effect.gen(function* () {
 				catch: (cause) =>
 					new StorageError({ operation: 'approve device', cause })
 			});
+
 			if (result.meta.changes !== 1) {
 				return yield* new InvalidRequest({
 					status: 400,
@@ -1163,6 +1274,7 @@ const makeAuth = Effect.gen(function* () {
 		denyDevice: Effect.fn('Auth.denyDevice')(function* (userCode) {
 			const code = yield* parseUserCode(userCode);
 			const now = new Date().toISOString();
+
 			const result = yield* Effect.tryPromise({
 				try: () =>
 					db
@@ -1175,6 +1287,7 @@ const makeAuth = Effect.gen(function* () {
 						.run(),
 				catch: (cause) => new StorageError({ operation: 'deny device', cause })
 			});
+
 			if (result.meta.changes !== 1) {
 				return yield* new InvalidRequest({
 					status: 400,
@@ -1188,7 +1301,9 @@ const makeAuth = Effect.gen(function* () {
 					message: 'Device authorization is invalid'
 				});
 			}
+
 			const hash = yield* hashToken(deviceCode);
+
 			const rows = yield* sql`
 				SELECT
 					device_code_hash, user_code, status, interval_seconds, expires_at,
@@ -1202,13 +1317,17 @@ const makeAuth = Effect.gen(function* () {
 						new StorageError({ operation: 'poll device authorization', cause })
 				)
 			);
-			const row = decodeRows(DeviceCodeRow, rows)[0];
+
+			const row = decodeRows(DeviceCodeRow)(rows)[0];
+
 			if (!row) {
 				return yield* new Unauthorized({
 					message: 'Device authorization is invalid'
 				});
 			}
+
 			const now = new Date();
+
 			if (new Date(row.expires_at).getTime() <= now.getTime()) {
 				yield* sql`
 					UPDATE device_codes SET status = 'expired'
@@ -1222,19 +1341,23 @@ const makeAuth = Effect.gen(function* () {
 							})
 					)
 				);
+
 				return yield* new Unauthorized({
 					message: 'Device authorization expired'
 				});
 			}
+
 			const lastPoll = row.last_polled_at
 				? new Date(row.last_polled_at).getTime()
 				: 0;
+
 			if (
 				row.status === 'pending' &&
 				now.getTime() - lastPoll < row.interval_seconds * 1000
 			) {
 				return { status: 'slow_down' as const };
 			}
+
 			yield* sql`
 				UPDATE device_codes SET last_polled_at = ${now.toISOString()}
 				WHERE device_code_hash = ${hash}
@@ -1244,9 +1367,11 @@ const makeAuth = Effect.gen(function* () {
 						new StorageError({ operation: 'record device poll', cause })
 				)
 			);
+
 			if (row.status === 'pending') {
 				return { status: 'authorization_pending' as const };
 			}
+
 			if (row.status !== 'approved') {
 				return yield* new Unauthorized({
 					message: 'Device authorization is no longer available'
@@ -1255,6 +1380,7 @@ const makeAuth = Effect.gen(function* () {
 
 			const generated = yield* makeApiKey(row.name);
 			const consumedAt = now.toISOString();
+
 			const results = yield* Effect.tryPromise({
 				try: () =>
 					db.batch([
@@ -1291,11 +1417,13 @@ const makeAuth = Effect.gen(function* () {
 						cause
 					})
 			});
+
 			if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) {
 				return yield* new Unauthorized({
 					message: 'Device authorization was already consumed'
 				});
 			}
+
 			return { status: 'complete' as const, apiKey: generated.token };
 		}),
 		revokeAllSessions: Effect.gen(function* () {
@@ -1315,6 +1443,7 @@ const makeAuth = Effect.gen(function* () {
 				catch: (cause) =>
 					new StorageError({ operation: 'revoke all sessions', cause })
 			});
+
 			return results
 				.slice(2)
 				.reduce((count, result) => count + (result.meta.changes ?? 0), 0);
@@ -1322,6 +1451,7 @@ const makeAuth = Effect.gen(function* () {
 		enforcePasscodeRotation: Effect.gen(function* () {
 			const passcodeHash = yield* hashToken(config.passcode);
 			const now = new Date().toISOString();
+
 			// One transactional batch (D1 batches are transactions): seed the
 			// row on first boot without revoking anything, revoke while the
 			// stored hash still differs from the deployed one, then record the
@@ -1380,7 +1510,9 @@ const makeAuth = Effect.gen(function* () {
 						cause
 					})
 			});
+
 			const rotated = results[5]?.meta.changes === 1;
+
 			return {
 				rotated,
 				revoked: rotated
@@ -1391,9 +1523,11 @@ const makeAuth = Effect.gen(function* () {
 		sweepExpired: Effect.fn('Auth.sweepExpired')(function* (limit) {
 			const bounded = Math.max(1, Math.min(limit, 100));
 			const now = new Date().toISOString();
+
 			const cutoff = new Date(
 				new Date(now).getTime() - 24 * 60 * 60 * 1_000
 			).toISOString();
+
 			const results = yield* Effect.tryPromise({
 				try: () =>
 					db.batch([
@@ -1432,6 +1566,7 @@ const makeAuth = Effect.gen(function* () {
 						cause
 					})
 			});
+
 			return results.reduce(
 				(count, result) => count + (result.meta.changes ?? 0),
 				0

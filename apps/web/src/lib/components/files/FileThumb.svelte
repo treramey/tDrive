@@ -23,22 +23,28 @@
 	} = $props();
 
 	let element = $state<HTMLElement>();
+
 	const attachElement: Attachment<HTMLElement> = (node) => {
 		element = node;
+
 		return () => {
 			if (element === node) element = undefined;
 		};
 	};
+
 	const image = $derived(file.contentType.startsWith('image/'));
 	const resizableImage = $derived(supportsDashboardThumbnail(file.contentType));
+
 	const rendered = $derived(
 		supportsRenderedDashboardThumbnail(file.kind, file.contentType)
 	);
+
 	const textLike = $derived(
 		!rendered &&
 			(file.contentType.startsWith('text/') ||
 				/(json|javascript|typescript|xml|yaml|csv)/i.test(file.contentType))
 	);
+
 	let visible = $state(false);
 	let loadedSource = $state('');
 	let failedSource = $state('');
@@ -90,6 +96,7 @@
 			{ signal }
 		) => {
 			if (!shouldLoad) return { source: '', text: '' };
+
 			if (isImage || isRendered) {
 				const source =
 					isPublic && !isUnavailable
@@ -106,7 +113,9 @@
 									isResizableImage || isRendered
 								)
 							).url;
+
 				signal.throwIfAborted();
+
 				return {
 					source:
 						isResizableImage || isRendered
@@ -115,24 +124,32 @@
 					text: ''
 				};
 			}
+
 			if (isText) {
 				const preview = await getFilePreview(auth, id, version, signal);
 				signal.throwIfAborted();
+
 				return { source: '', text: preview.text.slice(0, 360) };
 			}
+
 			return { source: '', text: '' };
 		},
 		{ initialValue: { source: '', text: '' } }
 	);
+
 	const primarySource = $derived(thumbnail.current.source);
+
 	const source = $derived(
 		retriedThumbnail.primary === primarySource
 			? retriedThumbnail.source
 			: primarySource
 	);
+
 	const text = $derived(thumbnail.current.text);
+
 	const handleImageError = async (failed: string) => {
 		const primary = thumbnail.current.source;
+
 		if (
 			failed !== primary ||
 			!file.public ||
@@ -142,10 +159,12 @@
 			retriedThumbnail.primary === primary
 		) {
 			failedSource = failed;
+
 			return;
 		}
 
 		retryingSource = primary;
+
 		try {
 			const link = await getContentLink(
 				token,
@@ -155,6 +174,7 @@
 				false,
 				true
 			);
+
 			if (thumbnail.current.source !== primary) return;
 			retriedThumbnail = {
 				primary,
@@ -166,6 +186,7 @@
 			if (retryingSource === primary) retryingSource = '';
 		}
 	};
+
 	const previewLoading = $derived(
 		(image || rendered || textLike) &&
 			(!visible ||

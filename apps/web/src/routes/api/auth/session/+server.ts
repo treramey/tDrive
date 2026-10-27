@@ -27,18 +27,23 @@ export const POST: RequestHandler = ({
 					message: 'The request origin is not allowed'
 				});
 			}
+
 			const auth = yield* Auth;
 			const authGuard = yield* AuthGuard;
 			const clientId = getClientAddress();
 			const lock = yield* authGuard.checkPasscodeLock(clientId);
+
 			if (!lock.allowed) return authRateLimitResponse(lock);
 			const rateLimit = yield* authGuard.consume('passcodeLogin', clientId);
+
 			if (!rateLimit.allowed) return authRateLimitResponse(rateLimit);
+
 			const input = yield* decodeJson(
 				request,
 				PasscodeLoginSchema,
 				'A passcode is required'
 			);
+
 			const outcome = yield* auth.createSession(input.passcode).pipe(
 				Effect.matchEffect({
 					onFailure: (failure) =>
@@ -59,8 +64,10 @@ export const POST: RequestHandler = ({
 							.pipe(Effect.map(() => token))
 				})
 			);
+
 			if (outcome instanceof Response) return outcome;
 			setBrowserSession(cookies, outcome);
+
 			return Response.json({ ok: true as const });
 		})
 	);
@@ -74,9 +81,11 @@ export const DELETE: RequestHandler = ({ cookies, request, url }) =>
 					message: 'The request origin is not allowed'
 				});
 			}
+
 			const auth = yield* Auth;
 			yield* auth.revokeSession(cookies.get(SESSION_COOKIE));
 			clearBrowserSession(cookies);
+
 			return new Response(null, { status: 204 });
 		})
 	);

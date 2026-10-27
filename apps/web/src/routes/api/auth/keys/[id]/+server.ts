@@ -9,6 +9,7 @@ export const DELETE: RequestHandler = ({ cookies, params, request, url }) =>
 			const auth = yield* Auth;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			yield* auth.revokeApiKey(params.id);
+
 			return new Response(null, { status: 204 });
 		})
 	);

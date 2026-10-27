@@ -8,6 +8,7 @@ import { Sites } from '$lib/server/services/sites';
 
 export const POST: RequestHandler = async (event) => {
 	const { cookies, params, request, url } = event;
+
 	const output = await runEdgeWithEvent(
 		event,
 		Effect.gen(function* () {
@@ -16,6 +17,7 @@ export const POST: RequestHandler = async (event) => {
 			const sites = yield* Sites;
 			yield* authorizeWriteRequest(auth, request, url, cookies);
 			const result = yield* sites.commit(params.id);
+
 			return {
 				fileId: result.file.id,
 				response: Response.json(
@@ -28,6 +30,7 @@ export const POST: RequestHandler = async (event) => {
 			};
 		})
 	);
+
 	if (event.platform) {
 		event.platform.ctx.waitUntil(
 			runWorkerProgram(
@@ -39,5 +42,6 @@ export const POST: RequestHandler = async (event) => {
 			)
 		);
 	}
+
 	return output.response;
 };

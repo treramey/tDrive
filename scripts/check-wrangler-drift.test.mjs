@@ -6,6 +6,7 @@ describe('check-wrangler-drift helpers', () => {
 		const parsed = JSON.parse(
 			stripComments('{ "NOTE": "see docs // then more" }')
 		);
+
 		expect(parsed.NOTE).toBe('see docs // then more');
 	});
 

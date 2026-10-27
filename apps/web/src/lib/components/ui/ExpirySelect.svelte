@@ -31,6 +31,7 @@
 
 	const makeSourceKey = (id: string | undefined, sourceValue: string) =>
 		`${id ?? ''}\u0000${sourceValue}`;
+
 	const sourceKey = $derived(makeSourceKey(identity, value));
 	let interaction = $state<Interaction>();
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -43,6 +44,7 @@
 
 	$effect(() => {
 		const currentSourceKey = sourceKey;
+
 		return () => {
 			void currentSourceKey;
 			generation += 1;
@@ -53,29 +55,37 @@
 	const currentInteraction = $derived(
 		interaction?.sourceKey === sourceKey ? interaction : undefined
 	);
+
 	const currentValue = $derived(currentInteraction?.draft ?? value);
 
 	// What the user clicked this session wins; otherwise infer the closest
 	// preset from the time remaining on the current expiration.
 	const active = $derived.by(() => {
 		if (currentInteraction) return currentInteraction.picked;
+
 		if (!currentValue) return 0;
+
 		const remaining =
 			(new Date(currentValue).getTime() - Date.now()) / 3_600_000;
+
 		if (!Number.isFinite(remaining) || remaining <= 0) return 'custom';
 		let best: number | 'custom' = 'custom';
 		let bestRatio = 1.5;
+
 		for (const preset of presets) {
 			if (preset.hours === 0) continue;
+
 			const ratio =
 				remaining > preset.hours
 					? remaining / preset.hours
 					: preset.hours / remaining;
+
 			if (ratio < bestRatio) {
 				bestRatio = ratio;
 				best = preset.hours;
 			}
 		}
+
 		return best;
 	});
 
@@ -95,13 +105,17 @@
 	) => {
 		try {
 			const result = await onchange?.(next);
+
 			if (ownGeneration !== generation || requestSourceKey !== sourceKey) {
 				return;
 			}
+
 			if (result === false) {
 				interaction = undefined;
+
 				return;
 			}
+
 			commitLocal(next, nextPicked);
 		} catch {
 			if (ownGeneration === generation && requestSourceKey === sourceKey) {
@@ -112,10 +126,13 @@
 
 	const apply = (next: string, nextPicked: number | 'custom') => {
 		clearTimer();
+
 		if (!onchange) {
 			commitLocal(next, nextPicked);
+
 			return;
 		}
+
 		const requestSourceKey = sourceKey;
 		interaction = {
 			sourceKey: requestSourceKey,
@@ -131,18 +148,23 @@
 			hours === 0
 				? ''
 				: new Date(Date.now() + hours * 60 * 60 * 1_000).toISOString();
+
 		apply(next, hours);
 	};
 
 	const chooseCustom = (raw: string) => {
 		const nextDate = raw ? new Date(raw) : null;
+
 		if (nextDate && Number.isNaN(nextDate.getTime())) return;
 		const next = nextDate?.toISOString() ?? '';
 		clearTimer();
+
 		if (!onchange) {
 			commitLocal(next, 'custom');
+
 			return;
 		}
+
 		const requestSourceKey = sourceKey;
 		interaction = {
 			sourceKey: requestSourceKey,

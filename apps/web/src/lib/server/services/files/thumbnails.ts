@@ -1,5 +1,5 @@
 import { dashboardThumbnailPrefix } from '../../../file-thumbnail';
-import { InvalidRequest, NotFound, StorageError } from '../../errors';
+import { NotFound, StorageError } from '../../errors';
 import {
 	commitThumbnailStorageCommand,
 	thumbnailQuotaDelta,
@@ -7,17 +7,19 @@ import {
 } from '../../thumbnail-storage';
 import { Effect } from 'effect';
 import type { FileInternals } from './internals';
-import type { FilesShape } from './types';
+import { DashboardThumbnailStoreResult, type FilesService } from './types';
 
 export const thumbnailOps = (
 	internals: FileInternals
-): Pick<FilesShape, 'storeDashboardThumbnail'> => {
+): Pick<FilesService, 'storeDashboardThumbnail'> => {
 	const { db, blobs } = internals;
 	const { checkStorageQuota, compensateStoredBlob } = internals;
+
 	return {
 		storeDashboardThumbnail: Effect.fn('Files.storeDashboardThumbnail')(
 			function* (id, version, body, size, expectedR2Key) {
 				const stateCommand = thumbnailStorageStateCommand(id, version);
+
 				const state = yield* Effect.tryPromise({
 					try: () =>
 						db
@@ -33,12 +35,17 @@ export const thumbnailOps = (
 							cause
 						})
 				});
+
 				if (state === null) return yield* new NotFound({ id });
+
 				if (state.thumbnail_r2_key !== expectedR2Key) {
 					if (state.thumbnail_r2_key === null) {
 						return yield* new NotFound({ id });
 					}
-					return { _tag: 'Existing', r2Key: state.thumbnail_r2_key } as const;
+
+					return DashboardThumbnailStoreResult.Existing({
+						r2Key: state.thumbnail_r2_key
+					});
 				}
 
 				yield* checkStorageQuota(
@@ -46,6 +53,7 @@ export const thumbnailOps = (
 				);
 				const r2Key = `${dashboardThumbnailPrefix(id, version)}${crypto.randomUUID()}.webp`;
 				const stored = yield* blobs.put(r2Key, body, size, 'image/webp');
+
 				const commitCommand = commitThumbnailStorageCommand(
 					id,
 					version,
@@ -53,6 +61,7 @@ export const thumbnailOps = (
 					stored.size,
 					expectedR2Key
 				);
+
 				const commit = Effect.tryPromise({
 					try: () =>
 						db
@@ -65,6 +74,7 @@ export const thumbnailOps = (
 							cause
 						})
 				});
+
 				const committed = yield* commit.pipe(
 					Effect.catch((failure) =>
 						compensateStoredBlob(
@@ -76,6 +86,7 @@ export const thumbnailOps = (
 						)
 					)
 				);
+
 				if (committed.meta.changes !== 1) {
 					yield* compensateStoredBlob(
 						new NotFound({ id }),
@@ -85,6 +96,7 @@ export const thumbnailOps = (
 						'dashboard thumbnail'
 					).pipe(Effect.catchTag('NotFound', () => Effect.void));
 					const winnerCommand = thumbnailStorageStateCommand(id, version);
+
 					const winner = yield* Effect.tryPromise({
 						try: () =>
 							db
@@ -97,16 +109,18 @@ export const thumbnailOps = (
 								cause
 							})
 					});
+
 					if (winner === null || winner.thumbnail_r2_key === null) {
 						return yield* new NotFound({ id });
 					}
-					return {
-						_tag: 'Existing',
+
+					return DashboardThumbnailStoreResult.Existing({
 						r2Key: winner.thumbnail_r2_key
-					} as const;
+					});
 				}
-				return { _tag: 'Stored', blob: stored } as const;
+
+				return DashboardThumbnailStoreResult.Stored({ blob: stored });
 			}
 		)
-	} satisfies Pick<FilesShape, 'storeDashboardThumbnail'>;
+	} satisfies Pick<FilesService, 'storeDashboardThumbnail'>;
 };

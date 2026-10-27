@@ -32,35 +32,45 @@ export const createDragUpload = ({
 	$effect(() => {
 		const token = session.token;
 		const nextIdentity = session.connecting ? '' : token;
+
 		if (uploadIdentity && uploadIdentity !== nextIdentity) {
 			uploads.cancelAll();
 			closeUpload();
 		}
+
 		uploadIdentity = nextIdentity;
 	});
 
 	const containsFiles = (event: DragEvent) =>
 		event.dataTransfer?.types.includes('Files') ?? false;
+
 	const containsFolder = (event: DragEvent) =>
 		Array.from(event.dataTransfer?.items ?? []).some(
 			(item) => item.kind === 'file' && item.webkitGetAsEntry()?.isDirectory
 		);
+
 	const resetDrag = () => {
 		dragDepth = 0;
 		dragging = false;
 		draggingFolder = false;
 	};
+
 	const queueFiles = (files: FileList) => {
 		const selected = Array.from(files);
+
 		if (selected.length === 0 || !available() || uploadOpen()) return;
+
 		if (maxUploadBytes() <= 0) {
 			toasts.error(new Error('The upload limit is not available yet'));
+
 			return;
 		}
+
 		const { accepted, rejected } = partitionUploadFiles(
 			selected,
 			maxUploadBytes()
 		);
+
 		if (rejected.length > 0) {
 			toasts.error(
 				new Error(
@@ -68,6 +78,7 @@ export const createDragUpload = ({
 				)
 			);
 		}
+
 		if (accepted.length === 0) return;
 		uploads.enqueue(accepted, {
 			token: session.token,
@@ -76,6 +87,7 @@ export const createDragUpload = ({
 			expiresAt: null
 		});
 	};
+
 	const onDragEnter = (event: DragEvent) => {
 		if (!available() || uploadOpen() || !containsFiles(event)) return;
 		event.preventDefault();
@@ -83,11 +95,14 @@ export const createDragUpload = ({
 		dragging = true;
 		draggingFolder = containsFolder(event);
 	};
+
 	const onDragLeave = (event: DragEvent) => {
 		if (!containsFiles(event)) return;
 		dragDepth = Math.max(0, dragDepth - 1);
+
 		if (dragDepth === 0) dragging = false;
 	};
+
 	const available = () =>
 		Boolean(session.token) &&
 		!session.connecting &&

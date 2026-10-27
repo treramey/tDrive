@@ -5,7 +5,7 @@ import { collapseVectorMatches } from '../semantic-policy';
 
 const EMBEDDING_MODEL = '@cf/baai/bge-small-en-v1.5';
 
-export interface EmbedderShape {
+export interface EmbedderService {
 	readonly enabled: boolean;
 	readonly documents: (
 		values: ReadonlyArray<string>
@@ -27,7 +27,7 @@ export interface VectorRecord {
 	};
 }
 
-export interface VectorIndexShape {
+export interface VectorIndexService {
 	readonly enabled: boolean;
 	readonly upsert: (
 		vectors: ReadonlyArray<VectorRecord>
@@ -41,13 +41,13 @@ export interface VectorIndexShape {
 	readonly count: Effect.Effect<number, StorageError>;
 }
 
-export class Embedder extends Context.Service<Embedder, EmbedderShape>()(
+export class Embedder extends Context.Service<Embedder, EmbedderService>()(
 	'app/Embedder'
 ) {}
 
 export class VectorIndex extends Context.Service<
 	VectorIndex,
-	VectorIndexShape
+	VectorIndexService
 >()('app/VectorIndex') {}
 
 type SemanticBoundEnv = Env & {
@@ -74,6 +74,7 @@ const embeddingData = (response: Ai_Cf_Baai_Bge_Small_En_V1_5_Output) => {
 	) {
 		throw new Error('Workers AI returned invalid 384-dimension embeddings');
 	}
+
 	return response.data;
 };
 
@@ -99,6 +100,7 @@ export const VectorIndexNull = Layer.succeed(
 
 const liveLayers = (env: SemanticBoundEnv) => {
 	const embeddings = createQueryEmbeddingCache(env.AUTH_GUARD);
+
 	const embed = (values: ReadonlyArray<string>) =>
 		Effect.tryPromise({
 			try: async () =>
@@ -121,13 +123,17 @@ const liveLayers = (env: SemanticBoundEnv) => {
 			query: (value) =>
 				Effect.gen(function* () {
 					const cached = yield* Effect.promise(() => embeddings.get(value));
+
 					if (cached) return cached;
+
 					const vector = yield* embed([value]).pipe(
 						Effect.map((vectors) => vectors[0] ?? null)
 					);
+
 					if (vector) {
 						yield* Effect.promise(() => embeddings.set(value, vector));
 					}
+
 					return vector;
 				})
 		})
@@ -196,14 +202,18 @@ const liveLayers = (env: SemanticBoundEnv) => {
 
 export const SemanticBindingsLive = (env: Env) => {
 	const mode = String(env.SEMANTIC_SEARCH);
+
 	if (mode === 'off') {
 		return Layer.merge(EmbedderNull, VectorIndexNull);
 	}
+
 	if (hasSemanticBindings(env)) return liveLayers(env);
+
 	if (mode === 'required') {
 		throw new Error(
 			'SEMANTIC_SEARCH=required needs both AI and VECTORIZE bindings'
 		);
 	}
+
 	return Layer.merge(EmbedderNull, VectorIndexNull);
 };

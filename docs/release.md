@@ -55,19 +55,89 @@ Semantic search notes for the first deploy:
   missing vectors regenerate on reindex. They are deliberately not part
   of the backup set.
 
-## Releasing
+## Configure release automation
+
+1. Enable GitHub Actions for the repository.
+2. Add the repository secret `RELEASE_TOKEN`. Use a repository-scoped PAT or GitHub
+   App token with Contents and Pull requests write permissions. Allow that identity
+   to push `changeset-release/main` and `v*` tags under your repository rules.
+   The default `GITHUB_TOKEN` cannot trigger the downstream tag workflow.
+3. Create the GitHub environment `production`. Add `CLOUDFLARE_API_TOKEN` and
+   `CLOUDFLARE_ACCOUNT_ID` as environment secrets. Give the Cloudflare token access
+   to the existing Workers and their production resources, including D1 migrations.
+4. Add environment approval rules if your deployment policy requires them.
+
+The Changesets workflow checks `RELEASE_TOKEN` after the frozen install and before
+any release mutation. The pinned action receives it as `GITHUB_TOKEN` for API calls
+and writes `.netrc` in a temporary home directory for branch and tag pushes.
+The workflow removes that directory after the action. Checkout never persists
+credentials. Cloudflare credentials exist only in the production deploy step,
+which checks both secrets before invoking `bun release`.
+
+## Release the app
+
+1. Run `bun changeset` from the repository root.
+2. Select the affected workspace and a patch, minor, or major bump. Write release
+   notes and include the generated `.changeset/*.md` file in the feature PR.
+3. Merge the feature PR into `main`.
+4. Review the generated `chore: release versions` PR. Check the notes, all four
+   workspace versions, the root version, and `bun.lock`.
+5. Merge the release PR to approve deployment. The Changesets workflow pushes
+   the immutable `vMAJOR.MINOR.PATCH` tag, and **App release** deploys production.
+6. Run `verify-deployment` against `drive.trevors.link` and `files.trevors.link`.
+   Call the release complete only after its report passes.
+
+The fixed group includes `@tdrive/web`, `@tdrive/site`, `@tdrive/shared`, and
+`@tdrive/cli`. A shared-library or CLI-only changeset advances the same application
+version. All packages remain private. Automation publishes no npm packages,
+CLI bundles, or app GitHub Releases. The existing CLI workflow still runs only
+when you manually push a `cli-v*` tag.
+
+`scripts/app-release.mjs` owns version preparation, tag creation, and tag
+verification. Version preparation runs Changesets 2.29.8, mirrors the workspace
+version to the root, regenerates `bun.lock` with Bun 1.4.0, and formats the
+manifests and changelogs. Regeneration can update dependency resolutions, so review
+the lockfile in the release PR. Internal `workspace:^` dependencies stay unchanged.
+The bootstrap changeset prepares `0.1.1`. Installing the tooling does not release
+or tag the existing `0.1.0` version.
+
+### Recover a failed release
+
+If release PR creation or tagging fails, rerun **Changesets** or dispatch it
+manually on `main`. With no pending notes, the tag command finds the commit that
+introduced the current version and its new workspace changelog entries. This
+also recovers a lost run after later commits retain the same version.
+
+An existing tag succeeds only when its peeled target is the exact release commit.
+A conflicting tag or uncertain remote response fails. Do not move or force-push
+an application tag. A tag that already exists does not trigger another deployment.
+
+If deployment fails, rerun **App release** for the same tag. Applied migrations
+remain applied, and the existing script repeats validation and both deployments.
+If the site fails after the app succeeds, inspect the archived `.release-history`
+and use the site rollback commands below if needed. The app and site deployments
+are separate operations.
+
+All automated app deployments share `tdrive-production` concurrency and never
+cancel a running deployment. Inside that lock, verification checks the canonical
+tag, root and workspace versions, release commit, remote tag, and main ancestry.
+It rejects a queued or retried release once a newer release version reaches main.
+GitHub does not guarantee queue order. Prepare a new release to deploy after a
+superseded attempt. Reserve local `bun release` for coordinated recovery because
+local commands do not acquire the GitHub production lock.
+
+### Deploy manually for coordinated recovery
 
 ```
 bun release
 ```
 
-The script refuses a dirty tree or placeholder ids in the target env,
-then runs format check → type/lint checks → tests → audit → build →
-app deploy dry run → landing-site dry run → D1 migrations → app deploy →
-landing-site deploy, and appends the deployed commit to
-`.release-history`. If the landing site fails after the app Worker is
-live, the script still records the app commit and prints rollback
-commands for `apps/site`.
+`scripts/release.sh` refuses a dirty tree or placeholder ids in the target
+environment. It runs format, type, lint, and test gates, audits dependencies,
+builds the app, and dry-runs both deployments. It then applies D1 migrations,
+deploys the app and landing site, and appends the deployed commit to
+`.release-history`. If the landing site fails after the app Worker is live,
+the script records the app commit and prints rollback commands for `apps/site`.
 
 A release is **complete** only after the production verification skill
 passes against the live deployment (the script prints the reminder).
@@ -130,3 +200,8 @@ pending device codes automatically (API keys stay).
 `.release-history` in the repo root accumulates
 `<timestamp> <env> <commit>` lines locally. The deployed commit is also
 visible via `wrangler deployments list --env production`.
+
+The file remains ignored by Git. **App release** archives it whenever it exists,
+including when the site deployment fails. Each artifact name includes the GitHub
+run ID and attempt number. Download that attempt's artifact when you investigate
+a partial deployment.

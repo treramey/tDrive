@@ -1,0 +1,62 @@
+name: Changesets
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: changesets-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 26
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.0
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Check release credentials
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$GITHUB_TOKEN" ]; then
+            echo "Set RELEASE_TOKEN with Contents and Pull requests write permissions. GITHUB_TOKEN cannot trigger the app release workflow." >&2
+            exit 1
+          fi
+          mkdir -m 700 -p "$RUNNER_TEMP/changesets-home"
+
+      - name: Prepare release PR or tag approved release
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d
+        with:
+          version: bun run release:version
+          publish: bun run release:tag
+          title: 'chore: release versions'
+          commit: 'chore: release versions'
+          createGithubReleases: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          # The pinned action writes .netrc here for its git pushes and child commands.
+          HOME: ${{ runner.temp }}/changesets-home
+
+      - name: Remove release credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/changesets-home"

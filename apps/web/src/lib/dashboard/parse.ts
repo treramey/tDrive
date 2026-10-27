@@ -7,6 +7,11 @@
 // on anything unexpected, keeping the types from @tdrive/shared. Like Effect's
 // Struct decoders, they require every declared field but ignore extra keys.
 import type {
+	PublicKeyCredentialCreationOptionsJSON,
+	PublicKeyCredentialRequestOptionsJSON
+} from '@simplewebauthn/browser';
+import type {
+	Passkey,
 	ApiKey,
 	DashboardFile,
 	FileContentLinkResponse,
@@ -59,7 +64,7 @@ const maybeString = (value: unknown, path: string): string | null => {
 	return fail(path);
 };
 
-const literal = <A extends string>(
+const literal = <const A extends string>(
 	value: unknown,
 	allowed: ReadonlyArray<A>,
 	path: string
@@ -272,4 +277,120 @@ export const parseSessionsRevokedResponse = (
 	return {
 		revoked: integer(record.revoked, 'sessions.revoked')
 	};
+};
+
+export const parsePasskeyList = (value: unknown): ReadonlyArray<Passkey> => {
+	const record = requireRecord(value, 'passkeys');
+	return list(
+		record.passkeys,
+		(item, path) => {
+			const row = requireRecord(item, path);
+			return {
+				id: text(row.id, `${path}.id`),
+				name: text(row.name, `${path}.name`),
+				createdAt: text(row.createdAt, `${path}.createdAt`),
+				lastUsedAt: maybeString(row.lastUsedAt, `${path}.lastUsedAt`),
+				deviceType: literal(
+					row.deviceType,
+					['singleDevice', 'multiDevice'],
+					`${path}.deviceType`
+				),
+				backedUp: flag(row.backedUp, `${path}.backedUp`),
+				currentSession: flag(row.currentSession, `${path}.currentSession`)
+			};
+		},
+		'passkeys'
+	);
+};
+
+export const parsePasskeyRemoval = (value: unknown) => ({
+	signedOut: flag(
+		requireRecord(value, 'removal').signedOut,
+		'removal.signedOut'
+	)
+});
+
+const passkeyOptions = (value: unknown) => {
+	const envelope = requireRecord(value, 'passkey');
+	const ceremonyId = text(envelope.ceremonyId, 'passkey.ceremonyId');
+	if (!/^[0-9a-f]{32}$/.test(ceremonyId)) fail('passkey.ceremonyId');
+	return {
+		ceremonyId,
+		options: requireRecord(envelope.options, 'passkey.options')
+	};
+};
+
+export const parsePasskeyLoginOptions = (value: unknown) => {
+	const { ceremonyId, options } = passkeyOptions(value);
+	const parsed: PublicKeyCredentialRequestOptionsJSON = {
+		challenge: text(options.challenge, 'options.challenge'),
+		rpId: text(options.rpId, 'options.rpId'),
+		timeout: integer(options.timeout, 'options.timeout'),
+		userVerification: literal(
+			options.userVerification,
+			['required'],
+			'options.userVerification'
+		)
+	};
+	return { ceremonyId, options: parsed };
+};
+
+export const parsePasskeyEnrollOptions = (value: unknown) => {
+	const { ceremonyId, options } = passkeyOptions(value);
+	const rp = requireRecord(options.rp, 'options.rp');
+	const user = requireRecord(options.user, 'options.user');
+	const selection = requireRecord(
+		options.authenticatorSelection,
+		'options.authenticatorSelection'
+	);
+	const parsed: PublicKeyCredentialCreationOptionsJSON = {
+		challenge: text(options.challenge, 'options.challenge'),
+		timeout: integer(options.timeout, 'options.timeout'),
+		rp: { id: text(rp.id, 'rp.id'), name: text(rp.name, 'rp.name') },
+		user: {
+			id: text(user.id, 'user.id'),
+			name: text(user.name, 'user.name'),
+			displayName: text(user.displayName, 'user.displayName')
+		},
+		attestation: literal(options.attestation, ['none'], 'options.attestation'),
+		authenticatorSelection: {
+			residentKey: literal(selection.residentKey, ['required'], 'residentKey'),
+			userVerification: literal(
+				selection.userVerification,
+				['required'],
+				'userVerification'
+			)
+		},
+		pubKeyCredParams: [
+			...list(
+				options.pubKeyCredParams,
+				(item) => {
+					const param = requireRecord(item, 'pubKeyCredParams');
+					return {
+						type: literal(param.type, ['public-key'], 'pubKeyCredParams.type'),
+						alg: integer(param.alg, 'pubKeyCredParams.alg')
+					};
+				},
+				'pubKeyCredParams'
+			)
+		],
+		excludeCredentials: [
+			...list(
+				options.excludeCredentials,
+				(item) => {
+					const credential = requireRecord(item, 'excludeCredentials');
+					return {
+						type: literal(
+							credential.type,
+							['public-key'],
+							'excludeCredentials.type'
+						),
+						id: text(credential.id, 'excludeCredentials.id')
+					};
+				},
+				'excludeCredentials'
+			)
+		]
+	};
+	return { ceremonyId, options: parsed };
 };

@@ -1,8 +1,26 @@
-import { API_KEY_PATTERN, type ApiKey, type ApiKeyScope } from '@tdrive/shared';
+import {
+	API_KEY_PATTERN,
+	type ApiKey,
+	type ApiKeyScope,
+	type Passkey
+} from '@tdrive/shared';
+import {
+	generateAuthenticationOptions,
+	generateRegistrationOptions,
+	verifyAuthenticationResponse,
+	verifyRegistrationResponse,
+	type PublicKeyCredentialCreationOptionsJSON,
+	type PublicKeyCredentialRequestOptionsJSON
+} from '@simplewebauthn/server';
 import type { Cookies } from '@sveltejs/kit';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { SqlClient } from 'effect/unstable/sql';
 import {
+	PASSKEY_ALGORITHMS,
+	PASSKEY_LIMIT,
+	PASSKEY_TTL_SECONDS,
+	PASSKEY_USER_VERIFICATION,
+	passkeyRelyingParty,
 	DEVICE_CODE_TTL_SECONDS,
 	DEVICE_POLL_INTERVAL_SECONDS,
 	allowsCredentialOrigin,
@@ -22,6 +40,14 @@ import {
 	Unauthorized,
 	validate
 } from '../errors';
+import {
+	CeremonyIdSchema,
+	ClientDataSchema,
+	base64url,
+	unbase64url,
+	type PasskeyEnrollSubmission,
+	type PasskeyLoginSubmission
+} from '../passkey-schema';
 import { Db } from './bindings';
 
 const ApiKeyRow = Schema.Struct({
@@ -77,7 +103,49 @@ export interface AuthorizedCredential {
 	readonly scope: ApiKeyScope;
 }
 
+type PasskeyFailure = InvalidRequest | Unauthorized | StorageError;
+type PasskeyStart =
+	| { readonly kind: 'login' }
+	| {
+			readonly kind: 'enroll';
+			readonly sessionToken: string;
+			readonly passcode: string;
+			readonly name: string;
+	  };
+type PasskeyPrompt = {
+	readonly ceremonyId: typeof CeremonyIdSchema.Type;
+	readonly bindingSecret: string;
+} & (
+	| {
+			readonly kind: 'login';
+			readonly options: PublicKeyCredentialRequestOptionsJSON;
+	  }
+	| {
+			readonly kind: 'enroll';
+			readonly options: PublicKeyCredentialCreationOptionsJSON;
+	  }
+);
+type PasskeyBinding = { readonly binding: string };
+
 export interface AuthShape {
+	readonly startPasskey: (
+		input: PasskeyStart
+	) => Effect.Effect<PasskeyPrompt, PasskeyFailure>;
+	readonly loginWithPasskey: (
+		input: typeof PasskeyLoginSubmission.Type & PasskeyBinding
+	) => Effect.Effect<string, PasskeyFailure>;
+	readonly enrollPasskey: (
+		input: typeof PasskeyEnrollSubmission.Type &
+			PasskeyBinding & { readonly sessionToken: string }
+	) => Effect.Effect<void, PasskeyFailure>;
+	readonly listPasskeys: (
+		sessionToken: string
+	) => Effect.Effect<ReadonlyArray<Passkey>, PasskeyFailure>;
+	readonly removePasskey: (input: {
+		readonly sessionToken: string;
+		readonly id: string;
+		readonly passcode: string;
+	}) => Effect.Effect<{ readonly signedOut: boolean }, PasskeyFailure>;
 	readonly authorize: (
 		input: AuthorizeInput
 	) => Effect.Effect<
@@ -249,10 +317,270 @@ const toApiKey = (row: typeof ApiKeyRow.Type): ApiKey => ({
 	revokedAt: row.revoked_at
 });
 
+const ChallengeBase = {
+	id: CeremonyIdSchema,
+	challenge: Schema.String,
+	binding_hash: Schema.String,
+	auth_epoch: Schema.Int,
+	origin: Schema.String,
+	rp_id: Schema.String,
+	expires_at: Schema.Int,
+	consumed_by: Schema.NullOr(Schema.String)
+};
+const ChallengeRow = Schema.Union([
+	Schema.Struct({
+		...ChallengeBase,
+		purpose: Schema.Literal('login'),
+		session_hash: Schema.Null,
+		name: Schema.Null
+	}),
+	Schema.Struct({
+		...ChallengeBase,
+		purpose: Schema.Literal('enroll'),
+		session_hash: Schema.String,
+		name: Schema.String
+	})
+]);
+const PasskeyRow = Schema.Struct({
+	id: Schema.String,
+	public_key: Schema.String,
+	name: Schema.String,
+	counter: Schema.Int,
+	revision: Schema.Int,
+	device_type: Schema.Literals(['singleDevice', 'multiDevice']),
+	backed_up: Schema.Int,
+	created_at: Schema.String,
+	last_used_at: Schema.NullOr(Schema.String)
+});
+const CredentialState = Schema.Struct({
+	auth_epoch: Schema.Int,
+	passcode_hash: Schema.String
+});
+const BrowserSessionRow = Schema.Struct({
+	token_hash: Schema.String,
+	passkey_id: Schema.NullOr(Schema.String)
+});
+const invalidPasskey = () =>
+	new Unauthorized({
+		message:
+			'Passkey request is invalid or expired. Try again or use the passcode.'
+	});
+const stalePasskey = () =>
+	new InvalidRequest({
+		status: 409,
+		message: 'Passkey access changed. Start again or use the passcode.'
+	});
+
 const makeAuth = Effect.gen(function* () {
 	const db = yield* Db;
 	const sql = (yield* SqlClient.SqlClient).withoutTransforms();
 	const config = yield* AppConfig;
+
+	const storage = <A>(operation: string, run: () => Promise<A>) =>
+		Effect.tryPromise({
+			try: run,
+			catch: (cause) => new StorageError({ operation, cause })
+		});
+	const query = <A, I>(
+		schema: Schema.Codec<A, I, never>,
+		statement: D1PreparedStatement
+	) =>
+		storage('read passkey state', async () => {
+			const result = await statement.all();
+			return Schema.decodeUnknownSync(Schema.Array(schema))(result.results);
+		});
+	const assertPasscode = (passcode: string) =>
+		Effect.gen(function* () {
+			const expected = yield* hashToken(config.passcode);
+			const actual = yield* hashToken(passcode);
+			if (!constantTimeEqual(hexBytes(expected), hexBytes(actual))) {
+				return yield* new Unauthorized({ message: 'Passcode is incorrect' });
+			}
+		});
+	const sessionMaterial = Effect.gen(function* () {
+		const token = randomToken();
+		const hash = yield* hashToken(token);
+		const now = new Date();
+		return {
+			token,
+			hash,
+			createdAt: now.toISOString(),
+			expiresAt: new Date(
+				now.getTime() + SESSION_MAX_AGE_SECONDS * 1000
+			).toISOString()
+		};
+	});
+	const sessionInsert = (
+		material: Effect.Success<typeof sessionMaterial>,
+		source: {
+			readonly id: string;
+			readonly ceremonyId: string;
+			readonly marker: string;
+		} | null
+	) =>
+		db
+			.prepare(
+				`INSERT INTO dashboard_sessions (token_hash, created_at, expires_at, last_used_at, passkey_id)
+			SELECT ?, ?, ?, ?, ? WHERE ? IS NULL OR EXISTS (
+				SELECT 1 FROM passkey_challenges WHERE id = ? AND consumed_by = ?
+			)`
+			)
+			.bind(
+				material.hash,
+				material.createdAt,
+				material.expiresAt,
+				material.createdAt,
+				source?.id ?? null,
+				source?.ceremonyId ?? null,
+				source?.ceremonyId ?? null,
+				source?.marker ?? null
+			);
+	const currentState = Effect.gen(function* () {
+		const hash = yield* hashToken(config.passcode);
+		yield* storage('initialize credential state', () =>
+			db
+				.prepare(
+					`INSERT INTO credential_state (id, passcode_hash, rotated_at)
+			VALUES (1, ?, ?) ON CONFLICT(id) DO NOTHING`
+				)
+				.bind(hash, new Date().toISOString())
+				.run()
+		);
+		const rows = yield* query(
+			CredentialState,
+			db.prepare(
+				'SELECT auth_epoch, passcode_hash FROM credential_state WHERE id = 1'
+			)
+		);
+		const state = rows[0];
+		if (!state || state.passcode_hash !== hash) return yield* stalePasskey();
+		return { epoch: state.auth_epoch, hash };
+	});
+	const browserSession = (token: string) =>
+		Effect.gen(function* () {
+			const hash = yield* hashToken(token);
+			const rows = yield* query(
+				BrowserSessionRow,
+				db
+					.prepare(
+						`SELECT token_hash, passkey_id FROM dashboard_sessions
+			WHERE token_hash = ? AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+					)
+					.bind(hash)
+			);
+			const row = rows[0];
+			if (!row)
+				return yield* new Unauthorized({
+					message: 'Sign in with the passcode to manage passkeys'
+				});
+			return row;
+		});
+	const ownerHandle = Effect.gen(function* () {
+		yield* storage('initialize passkey owner', () =>
+			db
+				.prepare(
+					'INSERT INTO auth_owner (id, user_handle) VALUES (1, ?) ON CONFLICT(id) DO NOTHING'
+				)
+				.bind(randomToken())
+				.run()
+		);
+		const rows = yield* query(
+			Schema.Struct({ user_handle: Schema.String }),
+			db.prepare('SELECT user_handle FROM auth_owner WHERE id = 1')
+		);
+		const row = rows[0];
+		if (!row)
+			return yield* new StorageError({
+				operation: 'read passkey owner',
+				cause: 'Owner is missing'
+			});
+		return row.user_handle;
+	});
+	const loadChallenge = (
+		input: {
+			readonly ceremonyId: typeof CeremonyIdSchema.Type;
+			readonly binding: string;
+		},
+		purpose: 'login' | 'enroll'
+	) =>
+		Effect.gen(function* () {
+			const site = yield* validate(() =>
+				passkeyRelyingParty(config.dashboardOrigin)
+			);
+			const state = yield* currentState;
+			const bindingHash = yield* hashToken(input.binding);
+			const rows = yield* query(
+				ChallengeRow,
+				db
+					.prepare('SELECT * FROM passkey_challenges WHERE id = ?')
+					.bind(input.ceremonyId)
+			);
+			const row = rows[0];
+			if (
+				!row ||
+				row.purpose !== purpose ||
+				row.consumed_by !== null ||
+				row.expires_at <= Math.floor(Date.now() / 1000) ||
+				row.binding_hash !== bindingHash ||
+				row.auth_epoch !== state.epoch ||
+				row.origin !== site.origin ||
+				row.rp_id !== site.id
+			) {
+				return yield* invalidPasskey();
+			}
+			return { row, state, site, bindingHash };
+		});
+	const checkClientData = (encoded: string) =>
+		Effect.gen(function* () {
+			const json = yield* Effect.try({
+				try: (): unknown =>
+					JSON.parse(new TextDecoder().decode(unbase64url(encoded))),
+				catch: invalidPasskey
+			});
+			const data = yield* Schema.decodeUnknownEffect(ClientDataSchema)(
+				json
+			).pipe(Effect.mapError(invalidPasskey));
+			if (data.crossOrigin === true) return yield* invalidPasskey();
+		});
+	const claimChallenge = (input: {
+		readonly row: typeof ChallengeRow.Type;
+		readonly hash: string;
+		readonly marker: string;
+		readonly bindingHash: string;
+		readonly credentialId: string;
+		readonly revision: number | null;
+	}) =>
+		db
+			.prepare(
+				`UPDATE passkey_challenges SET consumed_by = ?1
+		WHERE id = ?2 AND consumed_by IS NULL AND binding_hash = ?3 AND expires_at > unixepoch()
+			AND auth_epoch = ?4 AND origin = ?5 AND rp_id = ?6 AND purpose = ?7
+			AND EXISTS (SELECT 1 FROM credential_state WHERE id = 1 AND auth_epoch = ?4 AND passcode_hash = ?8)
+			AND ((purpose = 'login' AND EXISTS (SELECT 1 FROM passkeys WHERE id = ?9 AND revision = ?10))
+				OR (purpose = 'enroll' AND created_at > unixepoch() - ?11
+					AND session_hash = ?12 AND EXISTS (SELECT 1 FROM dashboard_sessions WHERE token_hash = ?12 AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+					AND (SELECT count(*) FROM passkeys) < ?13 AND NOT EXISTS (SELECT 1 FROM passkeys WHERE id = ?9)))`
+			)
+			.bind(
+				input.marker,
+				input.row.id,
+				input.bindingHash,
+				input.row.auth_epoch,
+				input.row.origin,
+				input.row.rp_id,
+				input.row.purpose,
+				input.hash,
+				input.credentialId,
+				input.revision,
+				PASSKEY_TTL_SECONDS,
+				input.row.session_hash,
+				PASSKEY_LIMIT
+			);
+	const requireCommitted = (results: D1Result[]) =>
+		Effect.gen(function* () {
+			if (results.some((result) => result.meta.changes !== 1))
+				return yield* stalePasskey();
+		});
 
 	const makeApiKey = Effect.fn('Auth.makeApiKey')(function* (name: string) {
 		const normalizedName = yield* validate(() => normalizeApiKeyName(name));
@@ -405,36 +733,292 @@ const makeAuth = Effect.gen(function* () {
 				scope: 'read-write' as const
 			};
 		}),
-		createSession: Effect.fn('Auth.createSession')(function* (passcode) {
-			const expected = yield* hashToken(config.passcode);
-			const actual = yield* hashToken(passcode);
-			if (!constantTimeEqual(hexBytes(expected), hexBytes(actual))) {
-				return yield* new Unauthorized({ message: 'Passcode is incorrect' });
-			}
-			const token = randomToken();
-			const tokenHash = yield* hashToken(token);
-			const createdAt = new Date();
-			const expiresAt = new Date(
-				createdAt.getTime() + SESSION_MAX_AGE_SECONDS * 1000
+		startPasskey: Effect.fn('Auth.startPasskey')(function* (input) {
+			const site = yield* validate(() =>
+				passkeyRelyingParty(config.dashboardOrigin)
 			);
-			yield* sql`
-				INSERT INTO dashboard_sessions (
-					token_hash, created_at, expires_at, last_used_at
-				) VALUES (
-					${tokenHash}, ${createdAt.toISOString()}, ${expiresAt.toISOString()},
-					${createdAt.toISOString()}
+			let sessionHash: string | null = null;
+			let name: string | null = null;
+			if (input.kind === 'enroll') {
+				sessionHash = (yield* browserSession(input.sessionToken)).token_hash;
+				yield* assertPasscode(input.passcode);
+				name = yield* validate(() => normalizeApiKeyName(input.name));
+			}
+			const state = yield* currentState;
+			const handle = yield* ownerHandle;
+			const ceremonyId = yield* Schema.decodeUnknownEffect(CeremonyIdSchema)(
+				randomHex(16)
+			).pipe(Effect.orDie);
+			const bindingSecret = randomToken();
+			const bindingHash = yield* hashToken(bindingSecret);
+			const challenge = randomToken();
+			const rows = yield* query(
+				Schema.Struct({ id: Schema.String }),
+				db.prepare('SELECT id FROM passkeys')
+			);
+			if (input.kind === 'enroll' && rows.length >= PASSKEY_LIMIT)
+				return yield* new InvalidRequest({
+					status: 409,
+					message:
+						'Remove a passkey before adding another. You can save up to 8.'
+				});
+			const result = yield* storage('start passkey attempt', () =>
+				db
+					.prepare(
+						`INSERT INTO passkey_challenges
+				(id, purpose, challenge, binding_hash, auth_epoch, origin, rp_id, created_at, expires_at, session_hash, name)
+				SELECT ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch() + ?, ?, ?
+				WHERE EXISTS (SELECT 1 FROM credential_state WHERE id = 1 AND auth_epoch = ? AND passcode_hash = ?)
+				AND (? IS NULL OR EXISTS (SELECT 1 FROM dashboard_sessions WHERE token_hash = ? AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))`
+					)
+					.bind(
+						ceremonyId,
+						input.kind,
+						challenge,
+						bindingHash,
+						state.epoch,
+						site.origin,
+						site.id,
+						PASSKEY_TTL_SECONDS,
+						sessionHash,
+						name,
+						state.epoch,
+						state.hash,
+						sessionHash,
+						sessionHash
+					)
+					.run()
+			);
+			yield* requireCommitted([result]);
+			if (input.kind === 'login') {
+				const options = yield* Effect.promise(() =>
+					generateAuthenticationOptions({
+						rpID: site.id,
+						challenge: unbase64url(challenge),
+						timeout: PASSKEY_TTL_SECONDS * 1000,
+						userVerification: PASSKEY_USER_VERIFICATION,
+						allowCredentials: []
+					})
+				);
+				return { kind: 'login' as const, ceremonyId, bindingSecret, options };
+			}
+			const options = yield* Effect.promise(() =>
+				generateRegistrationOptions({
+					rpID: site.id,
+					rpName: 'tdrive',
+					userName: 'owner',
+					userDisplayName: 'tdrive owner',
+					userID: unbase64url(handle),
+					challenge: unbase64url(challenge),
+					timeout: PASSKEY_TTL_SECONDS * 1000,
+					attestationType: 'none',
+					supportedAlgorithmIDs: PASSKEY_ALGORITHMS,
+					authenticatorSelection: {
+						residentKey: 'required',
+						userVerification: PASSKEY_USER_VERIFICATION
+					},
+					excludeCredentials: [...rows]
+				})
+			);
+			return { kind: 'enroll' as const, ceremonyId, bindingSecret, options };
+		}),
+		enrollPasskey: Effect.fn('Auth.enrollPasskey')(function* (input) {
+			const { row, state, site, bindingHash } = yield* loadChallenge(
+				input,
+				'enroll'
+			);
+			const session = yield* browserSession(input.sessionToken);
+			if (row.purpose !== 'enroll' || row.session_hash !== session.token_hash)
+				return yield* invalidPasskey();
+			yield* checkClientData(input.credential.response.clientDataJSON);
+			const result = yield* Effect.tryPromise({
+				try: () =>
+					verifyRegistrationResponse({
+						response: input.credential,
+						expectedChallenge: row.challenge,
+						expectedOrigin: site.origin,
+						expectedRPID: site.id,
+						requireUserPresence: true,
+						requireUserVerification: true,
+						supportedAlgorithmIDs: PASSKEY_ALGORITHMS
+					}),
+				catch: invalidPasskey
+			});
+			if (!result.verified) return yield* invalidPasskey();
+			const info = result.registrationInfo;
+			const marker = randomToken();
+			const results = yield* storage('enroll passkey', () =>
+				db.batch([
+					claimChallenge({
+						row,
+						hash: state.hash,
+						marker,
+						bindingHash,
+						credentialId: info.credential.id,
+						revision: null
+					}),
+					db
+						.prepare(
+							`INSERT INTO passkeys (id, public_key, name, counter, device_type, backed_up, created_at)
+					SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM passkey_challenges WHERE id = ? AND consumed_by = ?)`
+						)
+						.bind(
+							info.credential.id,
+							base64url(info.credential.publicKey),
+							row.name,
+							info.credential.counter,
+							info.credentialDeviceType,
+							Number(info.credentialBackedUp),
+							new Date().toISOString(),
+							row.id,
+							marker
+						)
+				])
+			);
+			yield* requireCommitted(results);
+		}),
+		loginWithPasskey: Effect.fn('Auth.loginWithPasskey')(function* (input) {
+			const { row, state, site, bindingHash } = yield* loadChallenge(
+				input,
+				'login'
+			);
+			const handle = yield* ownerHandle;
+			if (input.credential.response.userHandle !== handle)
+				return yield* invalidPasskey();
+			const rows = yield* query(
+				PasskeyRow,
+				db
+					.prepare('SELECT * FROM passkeys WHERE id = ?')
+					.bind(input.credential.id)
+			);
+			const credential = rows[0];
+			if (!credential) return yield* invalidPasskey();
+			yield* checkClientData(input.credential.response.clientDataJSON);
+			const result = yield* Effect.tryPromise({
+				try: () =>
+					verifyAuthenticationResponse({
+						response: input.credential,
+						expectedChallenge: row.challenge,
+						expectedOrigin: site.origin,
+						expectedRPID: site.id,
+						requireUserVerification: true,
+						credential: {
+							id: credential.id,
+							publicKey: unbase64url(credential.public_key),
+							counter: credential.counter
+						}
+					}),
+				catch: invalidPasskey
+			});
+			if (!result.verified) return yield* invalidPasskey();
+			const material = yield* sessionMaterial;
+			const marker = randomToken();
+			const info = result.authenticationInfo;
+			const results = yield* storage('sign in with passkey', () =>
+				db.batch([
+					claimChallenge({
+						row,
+						hash: state.hash,
+						marker,
+						bindingHash,
+						credentialId: credential.id,
+						revision: credential.revision
+					}),
+					sessionInsert(material, {
+						id: credential.id,
+						ceremonyId: row.id,
+						marker
+					}),
+					db
+						.prepare(
+							`UPDATE passkeys SET counter = ?, revision = revision + 1, last_used_at = ?, device_type = ?, backed_up = ?
+					WHERE id = ? AND EXISTS (SELECT 1 FROM passkey_challenges WHERE id = ? AND consumed_by = ?)`
+						)
+						.bind(
+							info.newCounter,
+							material.createdAt,
+							info.credentialDeviceType,
+							Number(info.credentialBackedUp),
+							credential.id,
+							row.id,
+							marker
+						)
+				])
+			);
+			yield* requireCommitted(results);
+			return material.token;
+		}),
+		listPasskeys: Effect.fn('Auth.listPasskeys')(function* (sessionToken) {
+			yield* currentState;
+			const session = yield* browserSession(sessionToken);
+			const rows = yield* query(
+				PasskeyRow,
+				db.prepare('SELECT * FROM passkeys ORDER BY created_at, id')
+			);
+			return rows.map((row) => ({
+				id: row.id,
+				name: row.name,
+				createdAt: row.created_at,
+				lastUsedAt: row.last_used_at,
+				deviceType: row.device_type,
+				backedUp: row.backed_up === 1,
+				currentSession: row.id === session.passkey_id
+			}));
+		}),
+		removePasskey: Effect.fn('Auth.removePasskey')(function* (input) {
+			yield* assertPasscode(input.passcode);
+			const state = yield* currentState;
+			const hash = yield* hashToken(input.sessionToken);
+			const results = yield* storage('remove passkey', () =>
+				db.batch([
+					db
+						.prepare(
+							`SELECT passkey_id FROM dashboard_sessions WHERE token_hash = ? AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+					AND EXISTS (SELECT 1 FROM credential_state WHERE id = 1 AND auth_epoch = ? AND passcode_hash = ?)`
+						)
+						.bind(hash, state.epoch, state.hash),
+					db
+						.prepare(
+							`DELETE FROM passkeys WHERE id = ? AND EXISTS (SELECT 1 FROM dashboard_sessions WHERE token_hash = ? AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+					AND EXISTS (SELECT 1 FROM credential_state WHERE id = 1 AND auth_epoch = ? AND passcode_hash = ?)`
+						)
+						.bind(input.id, hash, state.epoch, state.hash)
+				])
+			);
+			const rows = yield* Schema.decodeUnknownEffect(
+				Schema.Array(
+					Schema.Struct({ passkey_id: Schema.NullOr(Schema.String) })
 				)
-			`.pipe(
+			)(results[0]?.results).pipe(
 				Effect.mapError(
 					(cause) =>
-						new StorageError({ operation: 'create dashboard session', cause })
+						new StorageError({ operation: 'read passkey removal', cause })
 				)
 			);
-			return token;
+			const session = rows[0];
+			if (!session)
+				return yield* new Unauthorized({
+					message: 'A live browser session is required'
+				});
+			return { signedOut: session.passkey_id === input.id };
+		}),
+		createSession: Effect.fn('Auth.createSession')(function* (passcode) {
+			yield* assertPasscode(passcode);
+			const material = yield* sessionMaterial;
+			yield* storage('create dashboard session', () =>
+				sessionInsert(material, null).run()
+			);
+			return material.token;
 		}),
 		revokeSession: Effect.fn('Auth.revokeSession')(function* (sessionToken) {
 			if (!sessionToken) return;
 			const hash = yield* hashToken(sessionToken);
+			yield* storage('revoke session attempts', () =>
+				db
+					.prepare('DELETE FROM passkey_challenges WHERE session_hash = ?')
+					.bind(hash)
+					.run()
+			);
 			yield* sql`DELETE FROM dashboard_sessions WHERE token_hash = ${hash}`.pipe(
 				Effect.mapError(
 					(cause) =>
@@ -718,6 +1302,10 @@ const makeAuth = Effect.gen(function* () {
 			const results = yield* Effect.tryPromise({
 				try: () =>
 					db.batch([
+						db.prepare(
+							'UPDATE credential_state SET auth_epoch = auth_epoch + 1 WHERE id = 1'
+						),
+						db.prepare('DELETE FROM passkey_challenges'),
 						db.prepare('DELETE FROM dashboard_sessions'),
 						db.prepare(
 							`UPDATE device_codes SET status = 'denied'
@@ -727,10 +1315,9 @@ const makeAuth = Effect.gen(function* () {
 				catch: (cause) =>
 					new StorageError({ operation: 'revoke all sessions', cause })
 			});
-			return results.reduce(
-				(count, result) => count + (result.meta.changes ?? 0),
-				0
-			);
+			return results
+				.slice(2)
+				.reduce((count, result) => count + (result.meta.changes ?? 0), 0);
 		}).pipe(Effect.withSpan('Auth.revokeAllSessions')),
 		enforcePasscodeRotation: Effect.gen(function* () {
 			const passcodeHash = yield* hashToken(config.passcode);
@@ -771,8 +1358,18 @@ const makeAuth = Effect.gen(function* () {
 							.bind(passcodeHash),
 						db
 							.prepare(
+								`DELETE FROM passkey_challenges WHERE EXISTS (SELECT 1 FROM credential_state WHERE id = 1 AND passcode_hash <> ?)`
+							)
+							.bind(passcodeHash),
+						db
+							.prepare(
+								`DELETE FROM passkeys WHERE EXISTS (SELECT 1 FROM credential_state WHERE id = 1 AND passcode_hash <> ?)`
+							)
+							.bind(passcodeHash),
+						db
+							.prepare(
 								`UPDATE credential_state
-								SET passcode_hash = ?1, rotated_at = ?2
+								SET passcode_hash = ?1, rotated_at = ?2, auth_epoch = auth_epoch + 1
 								WHERE id = 1 AND passcode_hash <> ?1`
 							)
 							.bind(passcodeHash, now)
@@ -783,7 +1380,7 @@ const makeAuth = Effect.gen(function* () {
 						cause
 					})
 			});
-			const rotated = results[3]?.meta.changes === 1;
+			const rotated = results[5]?.meta.changes === 1;
 			return {
 				rotated,
 				revoked: rotated
@@ -800,6 +1397,11 @@ const makeAuth = Effect.gen(function* () {
 			const results = yield* Effect.tryPromise({
 				try: () =>
 					db.batch([
+						db
+							.prepare(
+								`DELETE FROM passkey_challenges WHERE id IN (SELECT id FROM passkey_challenges WHERE expires_at <= unixepoch() ORDER BY expires_at LIMIT ?)`
+							)
+							.bind(bounded),
 						db
 							.prepare(
 								`DELETE FROM dashboard_sessions

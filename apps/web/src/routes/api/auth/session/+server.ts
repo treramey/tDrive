@@ -1,10 +1,11 @@
 import { PasscodeLoginSchema } from '@tdrive/shared';
 import type { RequestHandler } from './$types';
 import { Effect } from 'effect';
+import { SESSION_COOKIE } from '$lib/server/auth-policy';
 import {
-	SESSION_COOKIE,
-	SESSION_MAX_AGE_SECONDS
-} from '$lib/server/auth-policy';
+	clearBrowserSession,
+	setBrowserSession
+} from '$lib/server/auth-browser';
 import { authRateLimitResponse } from '$lib/server/auth-rate-limit-response';
 import { runEdge } from '$lib/server/edge';
 import { InvalidRequest, Unauthorized } from '$lib/server/errors';
@@ -59,13 +60,7 @@ export const POST: RequestHandler = ({
 				})
 			);
 			if (outcome instanceof Response) return outcome;
-			cookies.set(SESSION_COOKIE, outcome, {
-				path: '/',
-				httpOnly: true,
-				secure: true,
-				sameSite: 'strict',
-				maxAge: SESSION_MAX_AGE_SECONDS
-			});
+			setBrowserSession(cookies, outcome);
 			return Response.json({ ok: true as const });
 		})
 	);
@@ -81,7 +76,7 @@ export const DELETE: RequestHandler = ({ cookies, request, url }) =>
 			}
 			const auth = yield* Auth;
 			yield* auth.revokeSession(cookies.get(SESSION_COOKIE));
-			cookies.delete(SESSION_COOKIE, { path: '/' });
+			clearBrowserSession(cookies);
 			return new Response(null, { status: 204 });
 		})
 	);

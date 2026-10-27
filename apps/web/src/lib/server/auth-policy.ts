@@ -75,3 +75,40 @@ export const allowsCredentialOrigin = (
 	origin: string | null,
 	dashboardOrigin: string
 ) => ['GET', 'HEAD'].includes(method) || origin === dashboardOrigin;
+
+export const PASSKEY_TTL_SECONDS = 120;
+export const PASSKEY_LIMIT = 8;
+export const PASSKEY_ALGORITHMS = [-7, -257];
+export const PASSKEY_USER_VERIFICATION = 'required';
+
+export const passkeyRelyingParty = (origin: string) => {
+	const url = new URL(origin);
+	const hostname = url.hostname;
+	if (
+		url.username ||
+		url.password ||
+		url.origin !== origin ||
+		!(
+			(url.protocol === 'https:' &&
+				/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/i.test(hostname) &&
+				!/^\d+(?:\.\d+){3}$/.test(hostname)) ||
+			(url.protocol === 'http:' && hostname === 'localhost')
+		)
+	) {
+		throw new InvalidRequest({
+			status: 400,
+			message: 'Passkeys require HTTPS or localhost. Use the passcode.'
+		});
+	}
+	return { origin, id: hostname };
+};
+
+export const passkeyCookieName = (id: string) => {
+	if (!/^[0-9a-f]{32}$/.test(id)) {
+		throw new InvalidRequest({
+			status: 400,
+			message: 'Passkey attempt is invalid'
+		});
+	}
+	return `__Host-adrive-wa-${id}`;
+};

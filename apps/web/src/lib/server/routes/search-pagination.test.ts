@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Schema } from 'effect';
-import { FileListResponseSchema } from '@adrive/shared';
+import { FileListResponseSchema } from '@tdrive/shared';
 
 vi.mock('$app/server', async () => {
 	const { mockGetRequestEvent } = await import('../test/route-context.js');

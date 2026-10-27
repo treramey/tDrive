@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Tag } from '@adrive/shared';
+	import type { Tag } from '@tdrive/shared';
 	import { deleteTag, updateTag } from '$lib/dashboard/api';
 	import { getToasts } from '$lib/dashboard/toast.svelte';
 	import Confirm from '$lib/components/ui/Confirm.svelte';

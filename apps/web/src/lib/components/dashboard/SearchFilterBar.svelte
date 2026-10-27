@@ -2,7 +2,7 @@
 	import type { Attachment } from 'svelte/attachments';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import TagFilterBar from '$lib/components/tags/TagFilterBar.svelte';
-	import type { Tag } from '@adrive/shared';
+	import type { Tag } from '@tdrive/shared';
 
 	let {
 		attachSearch,

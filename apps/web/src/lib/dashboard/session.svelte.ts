@@ -134,7 +134,7 @@ export class DashboardSession {
 	}
 }
 
-export const sessionContext = new Context<DashboardSession>('adrive.session');
+export const sessionContext = new Context<DashboardSession>('tdrive.session');
 
 export const createDashboardSession = (browserSession = false) =>
 	sessionContext.set(new DashboardSession(browserSession));

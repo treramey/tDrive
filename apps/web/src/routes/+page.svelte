@@ -8,7 +8,7 @@
 </script>
 
 <svelte:head>
-	<title>Files · adrive</title>
+	<title>Files · tdrive</title>
 	{#if contentOrigin}
 		<link rel="preconnect" href={contentOrigin} />
 		<link rel="dns-prefetch" href={contentOrigin} />

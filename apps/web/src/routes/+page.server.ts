@@ -1,5 +1,5 @@
-import { FileListResponseSchema } from '@adrive/shared';
-import type { FileListResponse } from '@adrive/shared';
+import { FileListResponseSchema } from '@tdrive/shared';
+import type { FileListResponse } from '@tdrive/shared';
 import { Effect, Schema } from 'effect';
 import {
 	supportsDashboardThumbnail,
@@ -130,7 +130,7 @@ export const load: PageServerLoad = async ({
 	platform,
 	url
 }) => {
-	depends('adrive:files');
+	depends('tdrive:files');
 	const mode = listingMode(
 		url.searchParams.get('view'),
 		url.searchParams.get('q') ?? '',

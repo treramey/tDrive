@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ApiKey } from '@adrive/shared';
+	import type { ApiKey } from '@tdrive/shared';
 	import { createApiKey, listApiKeys, revokeApiKey } from '$lib/dashboard/api';
 	import { formatDate } from '$lib/dashboard/format';
 	import { getToasts } from '$lib/dashboard/toast.svelte';

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DashboardFile } from '@adrive/shared';
+	import type { DashboardFile } from '@tdrive/shared';
 	import { formatBytes, formatDate } from '$lib/dashboard/format';
 
 	let { file }: { file: DashboardFile } = $props();

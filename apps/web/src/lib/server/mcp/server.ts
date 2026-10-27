@@ -1,4 +1,4 @@
-import type { DashboardFile } from '@adrive/shared';
+import type { DashboardFile } from '@tdrive/shared';
 import { McpServer } from '@modelcontextprotocol/server';
 import { Effect } from 'effect';
 import { z } from 'zod';
@@ -72,9 +72,9 @@ const fileIsLive = (
 ) =>
 	file.deletedAt === null && (file.expiresAt === null || file.expiresAt > now);
 
-export const createAdriveMcpServer = (input: McpServerInput) => {
+export const createTdriveMcpServer = (input: McpServerInput) => {
 	const server = new McpServer({
-		name: 'adrive',
+		name: 'tdrive',
 		version: '0.1.0'
 	});
 	registerReadTools(server, input);

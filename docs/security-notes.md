@@ -36,7 +36,7 @@ install it with `bun install --frozen-lockfile`.
 
 - Path: `apps/web > @sveltejs/kit > cookie`
 - The advisory concerns out-of-bounds characters in user-controlled cookie
-  names, paths, or domains. a-drive sets exactly one cookie
+  names, paths, or domains. tdrive sets exactly one cookie
   (`__Host-adrive-session`) with a fixed name and fixed attributes
   (`Path=/; HttpOnly; Secure; SameSite=Strict`), and never reflects user
   input into cookie attributes, so the vulnerable condition is not

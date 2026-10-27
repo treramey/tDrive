@@ -9,7 +9,7 @@ import {
 	mcpUnauthorizedResponse
 } from './auth';
 import { runMcp } from './run';
-import { createAdriveMcpServer } from './server';
+import { createTdriveMcpServer } from './server';
 
 export const mcpAllowedHostnames = (dashboardOrigin: string) => {
 	const hostname = new URL(dashboardOrigin).hostname;
@@ -32,7 +32,7 @@ export const handleMcpRequest = async (event: RequestEvent) => {
 
 	if (event.request.method === 'OPTIONS') {
 		return createMcpHandler(
-			() => new McpServer({ name: 'adrive', version: '0.1.0' }),
+			() => new McpServer({ name: 'tdrive', version: '0.1.0' }),
 			handlerOptions(env.DASHBOARD_ORIGIN)
 		)(event.request, env, ctx);
 	}
@@ -52,7 +52,7 @@ export const handleMcpRequest = async (event: RequestEvent) => {
 
 	return createMcpHandler(
 		() =>
-			createAdriveMcpServer({
+			createTdriveMcpServer({
 				env,
 				ctx,
 				credential: authorized.value

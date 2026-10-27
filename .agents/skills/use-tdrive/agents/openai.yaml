@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Use tdrive'
+  short_description: 'Operate the tdrive CLI safely day to day'
+  default_prompt: 'Use $use-tdrive to inspect, upload, download, organize, or publish with the tdrive CLI.'

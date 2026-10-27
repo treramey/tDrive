@@ -1,4 +1,4 @@
-import { TagListResponseSchema, TagResponseSchema } from '@adrive/shared';
+import { TagListResponseSchema, TagResponseSchema } from '@tdrive/shared';
 import { Console, Effect, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { HttpBody, HttpClient } from 'effect/unstable/http';

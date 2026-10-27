@@ -37,7 +37,7 @@ export const apiRequest = (
 // A friendly fallback when the server sends no {message} of its own.
 const statusHint = (status: number) => {
 	if (status === 401)
-		return 'Not signed in or the credential was rejected. Run `adrive login <server-url>`.';
+		return 'Not signed in or the credential was rejected. Run `tdrive login <server-url>`.';
 	if (status === 403) return 'This credential is not allowed to do that.';
 	if (status === 404) return 'Not found.';
 	if (status === 413) return 'That is too large for this drive.';

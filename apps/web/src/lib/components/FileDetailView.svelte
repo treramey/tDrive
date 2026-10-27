@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { FileDetailResponse, FileMutation, Tag } from '@adrive/shared';
+	import type { FileDetailResponse, FileMutation, Tag } from '@tdrive/shared';
 	import { page } from '$app/state';
 	import {
 		createTag,
@@ -313,7 +313,7 @@
 </script>
 
 <svelte:head>
-	<title>{detail.current?.file.displayName ?? 'File'} · adrive</title>
+	<title>{detail.current?.file.displayName ?? 'File'} · tdrive</title>
 </svelte:head>
 
 <main class="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8">

@@ -122,7 +122,7 @@ export const upgrade = Command.make(
 				yield* emit(
 					wantsJson()
 						? { status: 'current', version: CLI_VERSION, latest }
-						: `adrive v${CLI_VERSION} is up to date`
+						: `tdrive v${CLI_VERSION} is up to date`
 				);
 				return;
 			}
@@ -130,14 +130,14 @@ export const upgrade = Command.make(
 				yield* emit(
 					wantsJson()
 						? { status: 'outdated', version: CLI_VERSION, latest }
-						: `adrive v${latest} is available (installed: v${CLI_VERSION}). Run \`adrive upgrade\` to install it.`
+						: `tdrive v${latest} is available (installed: v${CLI_VERSION}). Run \`tdrive upgrade\` to install it.`
 				);
 				return;
 			}
 			// JSON mode stays machine-parseable: suppress human narration and
 			// the installer's own stdout, then emit a single result line.
 			if (!wantsJson()) {
-				yield* Console.log(`Upgrading adrive v${CLI_VERSION} -> v${latest}…`);
+				yield* Console.log(`Upgrading tdrive v${CLI_VERSION} -> v${latest}…`);
 			}
 			// Reuse the blessed installer so upgrade and fresh install can
 			// never drift. The installer is verified against the release's
@@ -200,11 +200,11 @@ export const upgrade = Command.make(
 								: ['pipe', 'inherit', 'inherit'],
 							env: {
 								...process.env,
-								ADRIVE_CLI_VERSION: release.tag,
+								TDRIVE_CLI_VERSION: release.tag,
 								// Upgrade in place: the running bundle's directory is
 								// where the installer must write, not the default,
 								// so custom install locations self-update correctly.
-								ADRIVE_INSTALL_DIR: dirname(fileURLToPath(import.meta.url))
+								TDRIVE_INSTALL_DIR: dirname(fileURLToPath(import.meta.url))
 							}
 						});
 						child.once('error', reject);

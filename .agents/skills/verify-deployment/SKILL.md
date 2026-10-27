@@ -1,9 +1,9 @@
 ---
 name: verify-deployment
-description: Verify a live a-drive deployment end to end through its real browser, HTTP, CLI, D1, and R2 boundaries. Use after deploying, after storage/auth/upload/routing changes, after migrations, and before trusting a-drive following Cloudflare configuration changes. Creates only uniquely-prefixed disposable files, purges them afterward, and produces a pass/fail report.
+description: Verify a live tdrive deployment end to end through its real browser, HTTP, CLI, D1, and R2 boundaries. Use after deploying, after storage/auth/upload/routing changes, after migrations, and before trusting tdrive following Cloudflare configuration changes. Creates only uniquely-prefixed disposable files, purges them afterward, and produces a pass/fail report.
 ---
 
-# Verify an a-drive deployment
+# Verify a tdrive deployment
 
 You are verifying a real, live deployment. Use whatever browser,
 HTTP, and shell tooling you have; nothing here assumes a specific
@@ -18,7 +18,7 @@ may be SKIPPED with a documented reason.
 
 - Dashboard origin (e.g. `https://drive.davis7.space`)
 - Content origin (e.g. `https://files.davis7.space`)
-- CLI path (repo checkout: `bun adrive`, needs Node 26+)
+- CLI path (repo checkout: `bun tdrive`, needs Node 26+)
 - Access method: the passcode (full run), or an existing read-write API
   key (reduced run — see below)
 - Whether destructive checks may run (default: **yes** — they touch only
@@ -74,7 +74,7 @@ curl) so no prior session can mask a failure.
   returns 401.
 - **[M]** Create a disposable **read-write** API key named with the run
   prefix (dashboard settings), or complete CLI device authorization
-  (`bun adrive login <dashboard-origin>`).
+  (`bun tdrive login <dashboard-origin>`).
 - **[M]** Create a disposable **read-only** key; verify `GET /api/files`
   succeeds while each of these mutations returns 403: an upload, a
   rename, a tag creation, a trash, and a version upload.
@@ -94,7 +94,7 @@ and binary (a few hundred random bytes, .bin). Record each one's
 SHA-256 before upload.
 
 - **[M]** Upload the text and image through the dashboard.
-- **[M]** Upload the PDF and binary through the CLI (`bun adrive put`).
+- **[M]** Upload the PDF and binary through the CLI (`bun tdrive put`).
 - **[M]** After each upload, verify via `GET /api/files/<id>`: display
   name, size, content type match the source.
 - **[M]** Download each file and compare checksums with the source.
@@ -183,7 +183,7 @@ Compare header **values**, not just presence, against
 - **[M]** A cookie-authenticated mutation with a forged
   `Origin: https://evil.example.com` header is rejected.
 - **[M]** CLI transport trust:
-  - `bun adrive login http://<dashboard-host>` (plain http, non-localhost)
+  - `bun tdrive login http://<dashboard-host>` (plain http, non-localhost)
     is refused.
   - With a config whose trusted origins are the real deployment, verify
     a download link pointing at an untrusted HTTPS origin is refused

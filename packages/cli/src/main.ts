@@ -11,12 +11,12 @@ import { upgrade } from './commands/upgrade.ts';
 import { findCliFailure, renderCliFailure } from './output.ts';
 import { CLI_VERSION } from './version.ts';
 
-const root = Command.make('adrive', {
+const root = Command.make('tdrive', {
 	json: Flag.boolean('json').pipe(
 		Flag.withDescription('Emit JSON lines on stdout (accepted anywhere)')
 	)
 }).pipe(
-	Command.withDescription('A small CLI for an adrive deployment'),
+	Command.withDescription('A small CLI for a tdrive deployment'),
 	Command.withSubcommands([
 		login,
 		whoami,

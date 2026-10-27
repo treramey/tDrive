@@ -2,7 +2,7 @@ import {
 	DeviceAuthorizationResponseSchema,
 	DevicePendingResponseSchema,
 	DeviceTokenResponseSchema
-} from '@adrive/shared';
+} from '@tdrive/shared';
 import { spawn } from 'node:child_process';
 import { Console, Effect, Schema } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
@@ -57,7 +57,7 @@ export const login = Command.make(
 			)
 		),
 		name: Flag.string('name').pipe(
-			Flag.withDefault('adrive CLI'),
+			Flag.withDefault('tdrive CLI'),
 			Flag.withDescription('Name for the full-access key created on approval')
 		)
 	},

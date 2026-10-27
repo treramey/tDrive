@@ -4,7 +4,7 @@ Application version history is not a backup. This document covers the
 independent backup that runs on a machine outside Cloudflare (an
 always-on box on your own network — referred to as the backup host
 below) and how to restore from it. Until the restore drill below has
-been performed at least once, a-drive must not be the only copy of
+been performed at least once, tdrive must not be the only copy of
 anything important.
 
 ## What is backed up, where
@@ -96,7 +96,7 @@ Note: KV only holds rate-limit counters and needs no restore. Sessions
 are revoked by the passcode-rotation detector on the first maintenance
 run in a new environment — sign in again afterwards.
 
-## Restore drill (required before trusting a-drive with sole copies)
+## Restore drill (required before trusting tdrive with sole copies)
 
 Perform each of these once against the real deployment, recording the
 date and outcome at the bottom of this file:

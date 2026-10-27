@@ -4,7 +4,7 @@ import { mcpAllowedHostnames } from './handler';
 import {
 	READ_TOOL_NAMES,
 	WRITE_TOOL_NAMES,
-	createAdriveMcpServer
+	createTdriveMcpServer
 } from './server';
 
 const env = {
@@ -41,7 +41,7 @@ const parseRpcBody = async (response: Response) => {
 const rpc = async (scope: 'read-only' | 'read-write', body: unknown) => {
 	const handler = createMcpHandler(
 		() =>
-			createAdriveMcpServer({
+			createTdriveMcpServer({
 				env,
 				ctx,
 				credential: {
@@ -85,12 +85,12 @@ describe('MCP server factory', () => {
 			params: {
 				protocolVersion: '2026-07-28',
 				capabilities: {},
-				clientInfo: { name: 'adrive-test', version: '0.0.0' }
+				clientInfo: { name: 'tdrive-test', version: '0.0.0' }
 			}
 		});
 		expect(status).toBe(200);
 		expect(body.error).toBeUndefined();
-		expect(body.result?.serverInfo?.name).toBe('adrive');
+		expect(body.result?.serverInfo?.name).toBe('tdrive');
 	});
 
 	it('lists only read tools for a read-only key', async () => {

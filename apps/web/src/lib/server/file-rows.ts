@@ -1,4 +1,4 @@
-import { TagSchema, type DashboardFile } from '@adrive/shared';
+import { TagSchema, type DashboardFile } from '@tdrive/shared';
 import { Schema } from 'effect';
 
 export const DashboardFileRow = Schema.Struct({

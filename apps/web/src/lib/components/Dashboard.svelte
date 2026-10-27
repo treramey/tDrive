@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DashboardFile } from '@adrive/shared';
+	import type { DashboardFile } from '@tdrive/shared';
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 	import type { FileListPayload } from '$lib/dashboard/api';
@@ -212,7 +212,7 @@
 		if (folder) {
 			toasts.error(
 				new Error(
-					'Folders are not uploaded as files. Use `adrive site put` for a site directory.'
+					'Folders are not uploaded as files. Use `tdrive site put` for a site directory.'
 				)
 			);
 			return;
@@ -243,7 +243,7 @@
 	active={drag.dragging}
 	disabled={!drag.available() || uploadOpen}
 	message={drag.draggingFolder
-		? 'Use `adrive site put` for folders'
+		? 'Use `tdrive site put` for folders'
 		: undefined}
 />
 

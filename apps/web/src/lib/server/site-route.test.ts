@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { sitePathCandidates } from '@adrive/shared';
+import { sitePathCandidates } from '@tdrive/shared';
 
 const routeSource = readFileSync(
 	new URL('../../routes/s/[id]/[...path]/+server.ts', import.meta.url),

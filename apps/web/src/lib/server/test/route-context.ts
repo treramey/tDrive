@@ -65,7 +65,7 @@ export const createRouteContext = async (): Promise<RouteTestContext> => {
 	const platformEnv = proxy.env as Env;
 	const env = {
 		...platformEnv,
-		PASSCODE: platformEnv.PASSCODE ?? 'adrive-route-test-passcode'
+		PASSCODE: platformEnv.PASSCODE ?? 'tdrive-route-test-passcode'
 	};
 	const cookies = new TestCookieStore();
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Tag } from '@adrive/shared';
+	import type { Tag } from '@tdrive/shared';
 	import { createTag } from '$lib/dashboard/api';
 	import { getToasts } from '$lib/dashboard/toast.svelte';
 	import Button from '$lib/components/ui/Button.svelte';

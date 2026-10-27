@@ -1,9 +1,9 @@
 const url = process.argv[2];
-const token = process.env.ADRIVE_API_KEY;
+const token = process.env.TDRIVE_API_KEY;
 
 if (!url || !token) {
 	console.error(
-		'usage: ADRIVE_API_KEY=adr_… node scripts/mcp-probe.mjs <mcp-url>'
+		'usage: TDRIVE_API_KEY=adr_… node scripts/mcp-probe.mjs <mcp-url>'
 	);
 	process.exit(1);
 }
@@ -44,7 +44,7 @@ const initialize = await rpc(
 	{
 		protocolVersion: '2026-07-28',
 		capabilities: {},
-		clientInfo: { name: 'adrive-mcp-probe', version: '0.1.0' }
+		clientInfo: { name: 'tdrive-mcp-probe', version: '0.1.0' }
 	},
 	1
 );

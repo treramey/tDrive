@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DashboardFile, FileVersion } from '@adrive/shared';
+	import type { DashboardFile, FileVersion } from '@tdrive/shared';
 	import CopyButton from '$lib/components/ui/CopyButton.svelte';
 	import { formatBytes, formatDate } from '$lib/dashboard/format';
 

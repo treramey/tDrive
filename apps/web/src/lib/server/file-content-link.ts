@@ -1,4 +1,4 @@
-import type { FileContentLinkResponse, FileSummary } from '@adrive/shared';
+import type { FileContentLinkResponse, FileSummary } from '@tdrive/shared';
 import { Effect } from 'effect';
 import { AppConfig } from './config';
 import { InvalidRequest } from './errors';

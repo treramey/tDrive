@@ -1,4 +1,4 @@
-import { type FileSummary, type SiteSessionCreate } from '@adrive/shared';
+import { type FileSummary, type SiteSessionCreate } from '@tdrive/shared';
 import { Effect, Schema } from 'effect';
 import { InvalidRequest, NotFound, StorageError } from '../../errors';
 

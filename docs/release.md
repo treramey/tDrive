@@ -60,71 +60,105 @@ Semantic search notes for the first deploy:
 1. Enable GitHub Actions for the repository.
 2. Add the repository secret `RELEASE_TOKEN`. Use a repository-scoped PAT or GitHub
    App token with Contents and Pull requests write permissions. Allow that identity
-   to push `changeset-release/main` and `v*` tags under your repository rules.
-   The default `GITHUB_TOKEN` cannot trigger the downstream tag workflow.
+   to push normal fast-forward commits to `main`, the `changeset-release/main`
+   branch, and `v*` and `cli-v*` tags. The default `GITHUB_TOKEN` cannot trigger
+   downstream tag workflows.
 3. Create the GitHub environment `production`. Add `CLOUDFLARE_API_TOKEN` and
    `CLOUDFLARE_ACCOUNT_ID` as environment secrets. Give the Cloudflare token access
    to the existing Workers and their production resources, including D1 migrations.
 4. Add environment approval rules if your deployment policy requires them.
 
-The Changesets workflow checks `RELEASE_TOKEN` after the frozen install and before
-any release mutation. The pinned action receives it as `GITHUB_TOKEN` for API calls
-and writes `.netrc` in a temporary home directory for branch and tag pushes.
-The workflow removes that directory after the action. Checkout never persists
-credentials. Cloudflare credentials exist only in the production deploy step,
-which checks both secrets before invoking `bun release`.
+The Changesets workflow serializes main pushes under `changesets-main`. Before
+release preparation, it checks `RELEASE_TOKEN`, sets the bot author, and writes
+`.netrc` inside a temporary home directory. The pinned Changesets action uses the
+same token and home. The workflow removes that directory even on failure.
+Checkout never persists credentials. Cloudflare credentials exist only in the
+production deploy step.
 
 ## Release the app
 
-1. Run `bun changeset` from the repository root.
-2. Select the affected workspace and a patch, minor, or major bump. Write release
-   notes and include the generated `.changeset/*.md` file in the feature PR.
-3. Merge the feature PR into `main`.
-4. Review the generated `chore: release versions` PR. Check the notes, all four
-   workspace versions, the root version, and `bun.lock`.
-5. Merge the release PR to approve deployment. The Changesets workflow pushes
-   the immutable `vMAJOR.MINOR.PATCH` tag, and **App release** deploys production.
-6. Run `verify-deployment` against `drive.trevors.link` and `files.trevors.link`.
+1. Merge app work into `main`. App authors do not add a Changeset.
+2. Let **Changesets** generate a patch release. It updates the root, web, and site
+   versions and both app changelogs, then pushes a normal main commit and an
+   immutable `vMAJOR.MINOR.PATCH` tag. There is no app release PR.
+3. Let **App release** verify that tag and run `bun release`.
+4. Run `verify-deployment` against `drive.trevors.link` and `files.trevors.link`.
    Call the release complete only after its report passes.
 
-The fixed group includes `@tdrive/web`, `@tdrive/site`, `@tdrive/shared`, and
-`@tdrive/cli`. A shared-library or CLI-only changeset advances the same application
-version. All packages remain private. Automation publishes no npm packages,
-CLI bundles, or app GitHub Releases. The existing CLI workflow still runs only
-when you manually push a `cli-v*` tag.
+Web and site source, shared source, and app deployment inputs trigger this lane.
+Notes contain the subjects and short SHAs of the relevant first-parent commits.
+The generated commit starts a second Changesets run that recognizes release
+bookkeeping and creates no additional app version. Its tag starts the deployment
+workflow. App preparation changes only web and site
+workspace versions in `bun.lock`. It preserves every dependency resolution,
+CLI version, and pending CLI note. Automation creates no app GitHub Release.
 
-`scripts/app-release.mjs` owns version preparation, tag creation, and tag
-verification. Version preparation runs Changesets 2.29.8, mirrors the workspace
-version to the root, regenerates `bun.lock` with Bun 1.4.0, and formats the
-manifests and changelogs. Regeneration can update dependency resolutions, so review
-the lockfile in the release PR. Internal `workspace:^` dependencies stay unchanged.
-The bootstrap changeset prepares `0.1.1`. Installing the tooling does not release
-or tag the existing `0.1.0` version.
+## Release the CLI
+
+1. Run `bun changeset` for CLI, shared, installer, or CLI build changes.
+2. Select `@tdrive/cli` or `@tdrive/shared` and write a patch, minor, or major note.
+   Include the note in the feature PR. Add or update a note with or after the latest consumer
+   change. An old pending note does not approve later work, even after a docs push.
+3. Merge the feature PR into `main`.
+4. Review the generated `chore: release versions` PR. Check both CLI and shared
+   versions, both changelogs, consumed notes, and regenerated `bun.lock`.
+   Regeneration can change dependency resolutions and needs review.
+5. Merge the release PR. Automation recovers the approved transition and pushes
+   `cli-vMAJOR.MINOR.PATCH`. **CLI release** verifies the transition before building
+   and uploading the bundle, installer, and `checksums.txt`.
+
+Changesets 2.29.8 fixes CLI and shared together and ignores web and site. CLI
+preparation fetches `origin/main` after the pinned action resets its branch to the
+original event SHA. Its release PR retains the latest app metadata. Internal
+`workspace:^` links stay unchanged. The app and CLI lanes can have different
+versions. All packages remain private, and automation publishes no npm packages.
+
+Shared source affects both lanes. Root tooling, root dependencies, and lock
+resolution changes conservatively affect both. A mixed push deploys the app while
+CLI notes remain pending for review. Missing or invalid CLI notes fail the CLI
+path after eligible app tagging, so that failure does not prevent app deployment.
+Validated version, changelog, consumed-note, and lock regeneration output does not
+request another release.
+
+Installers and upgrades use [treramey/tDrive releases](https://github.com/treramey/tDrive/releases).
+The migration changeset starts the reviewed CLI stream at `0.2.0`, above the
+existing `cli-v0.1.7` assets. Those earlier builds used tag-injected versions while
+the package manifests remained at `0.1.0`.
+The landing page's bootstrap command requires the first CLI release assets to
+exist there. `tdrive upgrade` uses the installer from its selected `cli-v*` release
+and verifies its SHA-256 checksum before execution. That installer downloads and
+verifies the bundle from the same release.
 
 ### Recover a failed release
 
-If release PR creation or tagging fails, rerun **Changesets** or dispatch it
-manually on `main`. With no pending notes, the tag command finds the commit that
-introduced the current version and its new workspace changelog entries. This
-also recovers a lost run after later commits retain the same version.
+Rerun **Changesets** or dispatch it manually on `main`. Preparation fetches the
+remote tip, finishes any missing app tag, and recovers an approved CLI tag before
+the action chooses its version or publish path. Later pending notes do not block
+recovery of an earlier CLI transition. That transition must itself have consumed
+CLI notes, left no pending notes, and introduced matching CLI and shared changelog
+headings. The initial `0.1.0` version has no release evidence and is never tagged.
+A manual dispatch with no previous app transition and no push range creates no
+initial app release.
 
-An existing tag succeeds only when its peeled target is the exact release commit.
-A conflicting tag or uncertain remote response fails. Do not move or force-push
-an application tag. A tag that already exists does not trigger another deployment.
+A rejected app main push fetches the new tip and recomputes the release, up to
+three attempts. It never force-pushes main. An existing local or remote tag
+succeeds only when its peeled target is the exact transition commit. A conflicting
+tag or uncertain remote response fails. Do not move release tags. A tag that
+already exists does not trigger another deployment.
 
 If deployment fails, rerun **App release** for the same tag. Applied migrations
-remain applied, and the existing script repeats validation and both deployments.
-If the site fails after the app succeeds, inspect the archived `.release-history`
-and use the site rollback commands below if needed. The app and site deployments
-are separate operations.
+remain applied, and the script repeats validation and both deployments. If the
+site fails after the app succeeds, inspect the archived `.release-history` and
+use the site rollback commands below. The app and site deployments are separate
+operations.
 
 All automated app deployments share `tdrive-production` concurrency and never
-cancel a running deployment. Inside that lock, verification checks the canonical
-tag, root and workspace versions, release commit, remote tag, and main ancestry.
-It rejects a queued or retried release once a newer release version reaches main.
-GitHub does not guarantee queue order. Prepare a new release to deploy after a
-superseded attempt. Reserve local `bun release` for coordinated recovery because
-local commands do not acquire the GitHub production lock.
+cancel a running deployment. Verification checks the canonical tag, lane versions,
+new changelogs, transition commit, exact remote and local targets, and main
+ancestry. A newer release in the same lane supersedes an older attempt. A newer
+release in the other lane does not. GitHub does not guarantee queue order. Reserve
+local `bun release` for coordinated recovery because local commands do not acquire
+the GitHub production lock.
 
 ### Deploy manually for coordinated recovery
 

@@ -2,12 +2,12 @@
 	"$schema": "https://unpkg.com/@changesets/config@3.1.2/schema.json",
 	"changelog": "@changesets/cli/changelog",
 	"commit": false,
-	"fixed": [["@tdrive/*"]],
+	"fixed": [["@tdrive/cli", "@tdrive/shared"]],
 	"linked": [],
 	"access": "restricted",
 	"baseBranch": "main",
 	"updateInternalDependencies": "patch",
-	"ignore": [],
+	"ignore": ["@tdrive/web", "@tdrive/site"],
 	"privatePackages": {
 		"version": true,
 		"tag": false

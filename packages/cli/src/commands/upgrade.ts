@@ -7,7 +7,7 @@ import { CliFailure } from '../errors.ts';
 import { emit, wantsJson } from '../output.ts';
 import { CLI_VERSION } from '../version.ts';
 
-const RELEASES_REPO = 'davis7dotsh/aDrive';
+const RELEASES_REPO = 'treramey/tDrive';
 const CLI_TAG_PREFIX = 'cli-v';
 
 // Semver comparison including prerelease precedence (1.0.0-beta.1 < 1.0.0;

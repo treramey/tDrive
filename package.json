@@ -25,9 +25,11 @@
 		"key:create:local": "bun scripts/create-local-key.mjs",
 		"postinstall": "find node_modules -path '*/@effect/tsgo*/lib/tsc' -exec chmod +x {} +",
 		"release": "bash scripts/release.sh",
-		"release:version": "node scripts/app-release.mjs version",
-		"release:tag": "node scripts/app-release.mjs tag",
+		"release:prepare": "node scripts/app-release.mjs prepare",
+		"release:cli-version": "node scripts/app-release.mjs cli-version",
+		"release:cli-tag": "node scripts/app-release.mjs cli-tag",
 		"release:verify-tag": "node scripts/app-release.mjs verify-tag",
+		"release:verify-cli-tag": "node scripts/app-release.mjs verify-cli-tag",
 		"search:rebuild:local": "bun --filter @tdrive/web search:rebuild:local",
 		"test": "bun run test:release && bun run --filter '@tdrive/*' --if-present test && bun --filter @tdrive/web test:runes && bun --filter @tdrive/web test:routes",
 		"test:release": "node --test scripts/app-release.test.mjs"

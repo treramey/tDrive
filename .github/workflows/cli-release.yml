@@ -19,9 +19,12 @@ jobs:
         with:
           # contents: write is only for the release step; package scripts
           # must not see a persisted token.
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -29,6 +32,16 @@ jobs:
 
       - name: Install
         run: bun install --frozen-lockfile
+
+      - name: Verify approved CLI release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GIT_CONFIG_COUNT: 2
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: ''
+          GIT_CONFIG_KEY_1: credential.helper
+          GIT_CONFIG_VALUE_1: '!f() { if [ "$1" = get ]; then printf "%s\n" "username=x-access-token" "password=$GITHUB_TOKEN"; fi; }; f'
+        run: bun run release:verify-cli-tag
 
       - name: Full gate
         run: |
@@ -41,7 +54,7 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#cli-v}"
-          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+          if ! printf '%s' "$VERSION" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
             echo "Tag $TAG does not contain a valid semver" >&2
             exit 1
           fi
@@ -73,6 +86,28 @@ jobs:
           sha256sum tdrive.mjs install-cli.sh > checksums.txt
           cat checksums.txt
 
+      - name: Write release notes
+        env:
+          CLI_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const version = process.env.CLI_VERSION;
+          const changelog = readFileSync('packages/cli/CHANGELOG.md', 'utf8');
+          const section = changelog.split(`## ${version}\n`)[1]?.split(/\n## /)[0];
+          if (!section?.trim()) throw new Error('Missing CLI release notes');
+          const notes = [
+            'Single-file build of the tdrive CLI. Requires Node >= 20.',
+            section.trim(),
+            'Install or update with the installer pinned to this release.',
+            '```sh',
+            `TDRIVE_CLI_VERSION=cli-v${version} bash -c "$(curl -fsSL https://github.com/treramey/tDrive/releases/download/cli-v${version}/install-cli.sh)"`,
+            '```',
+            'Already installed? Run `tdrive upgrade`. Assets are SHA-256 verified through `checksums.txt`.'
+          ].join('\n\n');
+          writeFileSync(`${process.env.RUNNER_TEMP}/cli-release-notes.md`, `${notes}\n`);
+          JS
+
       - name: Create release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -81,15 +116,4 @@ jobs:
             packages/cli/dist/tdrive.mjs
             packages/cli/dist/install-cli.sh
             packages/cli/dist/checksums.txt
-          body: |
-            Single-file build of the tdrive CLI (requires Node >= 20).
-
-            Install or update:
-
-            ```
-            curl -fsSL https://raw.githubusercontent.com/davis7dotsh/aDrive/main/scripts/install-cli.sh | bash
-            ```
-
-            Already installed? `tdrive upgrade` gets you here too.
-
-            Assets are SHA-256 verified by the installer via `checksums.txt`.
+          body_path: ${{ runner.temp }}/cli-release-notes.md

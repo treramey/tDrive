@@ -9,7 +9,7 @@ Use the installed `tdrive` CLI as the supported boundary for normal tdrive work.
 
 ## Choose the executable
 
-1. Use `tdrive` when it is installed, let the user know if it's not found and that they can install it from https://github.com/davis7dotsh/aDrive
+1. Use `tdrive` when it is installed, let the user know if it's not found and that they can install it from https://github.com/treramey/tDrive
 2. Do not install, upgrade, log in, or replace credentials unless the user asked for it. If it's needed, tell the user and ask them if you can.
 
 Use the selected form consistently in subsequent commands. The examples below use `tdrive`.

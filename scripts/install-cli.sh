@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tdrive CLI installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/davis7dotsh/aDrive/main/scripts/install-cli.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/treramey/tDrive/main/scripts/install-cli.sh | bash
 #
 # Installs the latest stable release (or $TDRIVE_CLI_VERSION, e.g.
 # cli-v0.1.0) into ~/.tdrive/bin with SHA-256 verification. No sudo, no
@@ -12,10 +12,10 @@
 # single-asset tampering, not a full repo compromise. Auditors: the
 # script is short; read it before piping to bash if that's your policy.
 # A release-pinned copy is published (and checksummed) with every
-# release: https://github.com/davis7dotsh/aDrive/releases
+# release: https://github.com/treramey/tDrive/releases
 set -euo pipefail
 
-REPO="davis7dotsh/aDrive"
+REPO="treramey/tDrive"
 INSTALL_DIR="${TDRIVE_INSTALL_DIR:-${HOME}/.tdrive/bin}"
 # INSTALL_DIR is interpolated into shell profile lines and a fish -c
 # call; rather than escaping for three shell dialects, refuse the
